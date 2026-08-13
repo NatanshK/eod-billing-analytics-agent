@@ -1,0 +1,104 @@
+{
+  "clinic_id": "CLINIC-MEHTA-001",
+  "visits": [
+    {
+      "visit_id": "V-101",
+      "timestamp": "2026-07-28T09:00:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "PARACETAMOL", "qty": 10, "unit_price_paise": 2000 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 20000,
+      "discount_paise": 0,
+      "is_refund": false
+    },
+    {
+      "visit_id": "V-102",
+      "timestamp": "2026-07-28T10:00:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "AMOXICILLIN", "qty": 4, "unit_price_paise": 6750 }
+      ],
+      "payment_mode": "card",
+      "amount_paid_paise": 10000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "partial payment — 17000 paise still outstanding"
+    },
+    {
+      "visit_id": "V-103",
+      "timestamp": "2026-07-28T11:00:00Z",
+      "doctor_id": "DR-PRIYA",
+      "line_items": [],
+      "payment_mode": "upi",
+      "amount_paid_paise": 0,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "consultation-only visit — empty line_items is legal, not an error"
+    },
+    {
+      "visit_id": "V-104",
+      "timestamp": "2026-07-28T12:00:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "OMEPRAZOLE", "qty": 5, "unit_price_paise": 4800 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 0,
+      "discount_paise": 30000,
+      "is_refund": false,
+      "_note": "discount exceeds line total — billed clamps to zero with a warning"
+    },
+    {
+      "visit_id": "V-105",
+      "timestamp": "2026-07-28T13:00:00Z",
+      "doctor_id": "DR-PRIYA",
+      "line_items": [
+        { "drug_name": "METFORMIN", "qty": 10, "unit_price_paise": 5750 }
+      ],
+      "payment_mode": "card",
+      "amount_paid_paise": 60000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "overpayment of 2500 paise — must not cancel out V-102's shortfall"
+    },
+    {
+      "visit_id": "V-106",
+      "timestamp": "2026-07-28T14:00:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "ATORVASTATIN", "qty": 1, "unit_price_paise": 15000 }
+      ],
+      "payment_mode": "upi",
+      "amount_paid_paise": -15000,
+      "discount_paise": 0,
+      "is_refund": true,
+      "_note": "refund with the negative-amount convention; its drug must not enter the rankings"
+    },
+    {
+      "visit_id": "V-107",
+      "timestamp": "2026-07-28T15:00:00Z",
+      "doctor_id": "DR-PRIYA",
+      "line_items": [],
+      "payment_mode": "cash",
+      "amount_paid_paise": 5000,
+      "discount_paise": 0,
+      "is_refund": true,
+      "_note": "refund with the positive-amount convention — mixing the two raises a day-level warning"
+    },
+    {
+      "visit_id": "V-108",
+      "timestamp": "2026-07-28T23:45:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "  cetirizine  ", "qty": 3, "unit_price_paise": 5000 }
+      ],
+      "payment_mode": "UPI",
+      "amount_paid_paise": 15000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "late-night visit, messy drug casing, uppercase payment mode"
+    }
+  ]
+}

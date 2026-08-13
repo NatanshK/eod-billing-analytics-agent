@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: swasthiq-eod-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      # Render's free tier has an ephemeral filesystem, so a file-backed SQLite
+      # database would be wiped on every restart anyway. In-memory is honest
+      # about that, and the sample days are re-seeded at startup.
+      - key: DB_PATH
+        value: ":memory:"
+      - key: SEED_ON_STARTUP
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        sync: false # set to the deployed frontend origin
+      - key: OPENROUTER_API_KEY
+        sync: false # set in the Render dashboard; absent = deterministic fallback
+      - key: OPENROUTER_MODEL
+        value: qwen/qwen-2.5-72b-instruct
+      - key: PYTHON_VERSION
+        value: "3.13.3"

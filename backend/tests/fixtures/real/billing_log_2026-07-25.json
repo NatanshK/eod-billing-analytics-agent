@@ -1,0 +1,58 @@
+[
+  {
+    "clinic_id": "CLN-KNP-014",
+    "visit_id": "V-20260725-001",
+    "timestamp": "2026-07-25T10:00:00Z",
+    "doctor_id": "DOC-014-01",
+    "line_items": [
+      {
+        "drug_name": "ATORVASTATIN",
+        "qty": 2,
+        "unit_price_paise": 12000
+      }
+    ],
+    "payment_mode": "card",
+    "amount_paid_paise": -24000,
+    "discount_paise": 0,
+    "is_refund": true
+  },
+  {
+    "clinic_id": "CLN-KNP-014",
+    "visit_id": "V-20260725-002",
+    "timestamp": "2026-07-25T13:00:00Z",
+    "doctor_id": "DOC-014-01",
+    "line_items": [
+      {
+        "drug_name": "AMOXICILLIN",
+        "qty": 3,
+        "unit_price_paise": 6000
+      },
+      {
+        "drug_name": "OMEPRAZOLE",
+        "qty": 1,
+        "unit_price_paise": 4000
+      }
+    ],
+    "payment_mode": "upi",
+    "amount_paid_paise": -22000,
+    "discount_paise": 0,
+    "is_refund": true
+  },
+  {
+    "clinic_id": "CLN-KNP-014",
+    "visit_id": "V-20260725-003",
+    "timestamp": "2026-07-25T16:00:00Z",
+    "doctor_id": "DOC-014-02",
+    "line_items": [
+      {
+        "drug_name": "METFORMIN",
+        "qty": 1,
+        "unit_price_paise": 3000
+      }
+    ],
+    "payment_mode": "upi",
+    "amount_paid_paise": -3000,
+    "discount_paise": 0,
+    "is_refund": true
+  }
+]

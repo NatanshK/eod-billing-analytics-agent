@@ -1,0 +1,110 @@
+{
+  "clinic_id": "CLINIC-MEHTA-001",
+  "visits": [
+    {
+      "visit_id": "V-201",
+      "timestamp": "2026-07-29T09:00:00Z",
+      "line_items": [
+        { "drug_name": "PARACETAMOL", "qty": 5, "unit_price_paise": 2000 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 10000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "the one good row — everything below is deliberately broken"
+    },
+    {
+      "visit_id": "V-202",
+      "timestamp": "2026-07-29T09:30:00Z",
+      "line_items": [
+        { "drug_name": "AMOXICILLIN", "qty": 2, "unit_price_paise": 6750 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 13500.0,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "float in a paise field -> non_integer_paise"
+    },
+    {
+      "visit_id": "V-203",
+      "timestamp": "2026-07-29T10:00:00Z",
+      "line_items": [
+        { "drug_name": "METFORMIN", "qty": 0, "unit_price_paise": 5750 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 0,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "zero quantity -> non_positive_quantity"
+    },
+    {
+      "visit_id": "V-204",
+      "timestamp": "2026-07-29T10:30:00",
+      "line_items": [],
+      "payment_mode": "cash",
+      "amount_paid_paise": 5000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "naive timestamp, no offset -> missing_timezone"
+    },
+    {
+      "visit_id": "V-205",
+      "timestamp": "2026-07-29T11:00:00Z",
+      "line_items": [],
+      "payment_mode": "netbanking",
+      "amount_paid_paise": 5000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "unsupported payment mode -> invalid_payment_mode"
+    },
+    {
+      "visit_id": "V-201",
+      "timestamp": "2026-07-29T11:30:00Z",
+      "line_items": [],
+      "payment_mode": "cash",
+      "amount_paid_paise": 5000,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "visit_id repeats row 0 -> duplicate_visit_id"
+    },
+    {
+      "visit_id": "V-207",
+      "timestamp": "2026-07-29T12:00:00Z",
+      "line_items": [],
+      "payment_mode": "cash",
+      "amount_paid_paise": -2500,
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "negative payment without the refund flag -> negative_payment"
+    },
+    {
+      "visit_id": "V-208",
+      "timestamp": "2026-07-29T12:30:00Z",
+      "line_items": [],
+      "payment_mode": "cash",
+      "amount_paid_paise": 0,
+      "discount_paise": 0,
+      "is_refund": true,
+      "_note": "refund of nothing -> empty_refund"
+    },
+    {
+      "visit_id": "V-209",
+      "timestamp": "2026-07-29T13:00:00Z",
+      "line_items": [],
+      "payment_mode": "cash",
+      "discount_paise": 0,
+      "is_refund": false,
+      "_note": "amount_paid_paise missing entirely -> missing_field"
+    },
+    {
+      "visit_id": "V-210",
+      "timestamp": "2026-07-29T13:30:00Z",
+      "line_items": [],
+      "payment_mode": "cash",
+      "amount_paid_paise": 4000,
+      "discount_paise": -500,
+      "is_refund": false,
+      "_note": "negative discount -> negative_discount"
+    }
+  ]
+}

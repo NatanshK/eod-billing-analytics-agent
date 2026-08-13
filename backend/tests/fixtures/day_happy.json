@@ -1,0 +1,66 @@
+{
+  "clinic_id": "CLINIC-MEHTA-001",
+  "visits": [
+    {
+      "visit_id": "V-001",
+      "timestamp": "2026-07-27T09:15:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "Paracetamol", "qty": 10, "unit_price_paise": 2000 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 20000,
+      "discount_paise": 0,
+      "is_refund": false
+    },
+    {
+      "visit_id": "V-002",
+      "timestamp": "2026-07-27T10:30:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "Amoxicillin", "qty": 6, "unit_price_paise": 6750 }
+      ],
+      "payment_mode": "card",
+      "amount_paid_paise": 40000,
+      "discount_paise": 500,
+      "is_refund": false
+    },
+    {
+      "visit_id": "V-003",
+      "timestamp": "2026-07-27T12:10:00Z",
+      "doctor_id": "DR-PRIYA",
+      "line_items": [
+        { "drug_name": "Atorvastatin", "qty": 5, "unit_price_paise": 12000 },
+        { "drug_name": "Paracetamol", "qty": 4, "unit_price_paise": 2000 }
+      ],
+      "payment_mode": "upi",
+      "amount_paid_paise": 65000,
+      "discount_paise": 3000,
+      "is_refund": false
+    },
+    {
+      "visit_id": "V-004",
+      "timestamp": "2026-07-27T12:45:00Z",
+      "doctor_id": "DR-ANAND",
+      "line_items": [
+        { "drug_name": "Metformin", "qty": 12, "unit_price_paise": 5750 }
+      ],
+      "payment_mode": "cash",
+      "amount_paid_paise": 50000,
+      "discount_paise": 0,
+      "is_refund": false
+    },
+    {
+      "visit_id": "V-005",
+      "timestamp": "2026-07-27T15:20:00Z",
+      "doctor_id": "DR-PRIYA",
+      "line_items": [
+        { "drug_name": "Omeprazole", "qty": 8, "unit_price_paise": 4800 }
+      ],
+      "payment_mode": "upi",
+      "amount_paid_paise": 38000,
+      "discount_paise": 400,
+      "is_refund": false
+    }
+  ]
+}
