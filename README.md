@@ -9,6 +9,23 @@ which **every figure is traceable back to the report**.
 /frontend   React app (Vite + TypeScript)
 ```
 
+## Live
+
+| | |
+|---|---|
+| **App** | https://eod-billing-analytics-agent-eta.vercel.app |
+| **API** | https://swasthiq-eod-api.onrender.com |
+| **Health** | https://swasthiq-eod-api.onrender.com/api/v1/health |
+| **API docs** | https://swasthiq-eod-api.onrender.com/docs |
+
+The API runs on a free tier that sleeps when idle, so the **first request after a
+quiet period can take up to a minute** while the container wakes. Loading the
+health endpoint once first makes the app itself feel instant.
+
+Three sample clinic-days are seeded at startup — 27 Jul 2026 (18 of 19 rows, one
+quarantined), 25 Jul (every row a refund) and 26 Jul (an empty day). Step between
+them with the arrows beside the date in the header.
+
 ---
 
 ## Quick start
@@ -352,16 +369,22 @@ by the code under test would only prove the code agrees with itself.
 ## Deployment
 
 Frontend on Vercel (`frontend/vercel.json`), backend on Render
-(`backend/render.yaml`).
+(`backend/render.yaml`). Both on free tiers, so the running demo costs nothing.
 
-- On Vercel, set **Root Directory** to `frontend` — `vercel.json` configures the
+To reproduce it:
+
+- On Render, deploy from the blueprint with **Blueprint Path** set to
+  `backend/render.yaml` — Render looks at the repo root by default and the file
+  is not there. Supply `OPENROUTER_API_KEY` and `ALLOWED_ORIGINS`, which are
+  marked `sync: false` so no secret lives in the repo.
+- On Vercel, set **Root Directory** to `frontend`. `vercel.json` configures the
   build but cannot select the subdirectory it runs in.
-- Set `VITE_API_BASE_URL` on Vercel to the Render URL. It is read at *build* time,
-  so changing it needs a redeploy, not a restart.
-- Set `ALLOWED_ORIGINS` on Render to the Vercel origin.
-- Set `OPENROUTER_API_KEY` on Render for model-written narratives; without it the
-  deployment still works end to end on the fallback. The model defaults to a
-  free-tier one, so the deployed demo costs nothing to run.
-- Render's free tier sleeps: the first request after idle can take ~30s.
+- Set `VITE_API_BASE_URL` on Vercel to the Render URL *before the first build*.
+  Vite substitutes it at build time, so adding it later needs a redeploy rather
+  than a restart. If it is missing, the app says so explicitly instead of failing
+  against `localhost`.
+- Set `ALLOWED_ORIGINS` on Render to the exact Vercel origin, no trailing slash.
+- Without `OPENROUTER_API_KEY` the deployment still works end to end on the
+  deterministic fallback; the narrative is simply labelled `source: "fallback"`.
 - `DB_PATH=:memory:` there, because the free tier's filesystem is ephemeral
   anyway; the sample days re-seed at startup.
