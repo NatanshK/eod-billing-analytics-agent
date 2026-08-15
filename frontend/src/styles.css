@@ -538,6 +538,80 @@ body {
   color: var(--text-muted);
 }
 
+/* ----------------------------------------------------------- disclosure */
+
+/* Collapsed, this is one quiet line so the specified layout starts where the
+   mockup starts. Open, it becomes the notice blocks below. */
+.disclosure {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.disclosure__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none; /* the custom chevron replaces the native triangle */
+}
+
+.disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure__summary:hover {
+  color: var(--text);
+}
+
+.disclosure__summary:focus-visible {
+  outline: 2px solid var(--blue-600);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+/* Amber only when rows were actually held out of the figures; a warning that
+   merely annotates correct totals does not deserve the same alarm. */
+.disclosure__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue-600);
+  flex-shrink: 0;
+}
+
+.disclosure__dot--warn {
+  background: #d97706;
+}
+
+.disclosure__label {
+  flex: 1;
+}
+
+.disclosure__chevron {
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.disclosure[open] .disclosure__chevron {
+  transform: rotate(90deg);
+}
+
+.disclosure__body {
+  padding: 0 12px 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclosure__chevron {
+    transition: none;
+  }
+}
+
 /* --------------------------------------------------------------- notice */
 
 .notice {

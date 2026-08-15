@@ -1,17 +1,15 @@
 """Billing-log parsing, validation and normalisation.
 
-This module turns a raw payload into a list of :class:`Visit` records with every
-monetary figure already reduced to integer paise, or into a precise list of
-:class:`RowError` objects explaining which row failed and why.
+Turns a raw payload into Visit records with every monetary figure already reduced
+to integer paise, or into RowError objects naming which row failed and why.
 
 Two rules shape the design:
 
-* **Errors are collected, not raised on first failure.** A front desk fixing a
-  day's log wants every problem at once, not one per upload round-trip.
-* **Amounts are strictly integers.** ``4285000`` is accepted; ``4285000.0`` and
-  ``"4285000"`` are not. The brief calls the integer-paise choice intentional, so
-  a float arriving in a paise field is treated as a data-entry defect rather than
-  quietly coerced.
+* Errors are collected, not raised on first failure. A front desk fixing a day's
+  log wants every problem at once, not one per upload round-trip.
+* Amounts are strictly integers. 4285000 is accepted; 4285000.0 and "4285000"
+  are not. A float in a paise field is a data-entry defect, not something to
+  quietly coerce.
 """
 
 from __future__ import annotations
@@ -44,7 +42,7 @@ PAYMENT_MODES: tuple[str, ...] = tuple(m.value for m in PaymentMode)
 
 
 class LineItemIn(BaseModel):
-    """One dispensed drug line. Quantities and prices are strict integers."""
+    """One dispensed drug line."""
 
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -54,7 +52,7 @@ class LineItemIn(BaseModel):
 
 
 class VisitIn(BaseModel):
-    """One visit row exactly as it arrives from the billing log."""
+    """One visit row as it arrives from the billing log."""
 
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -81,9 +79,8 @@ class VisitIn(BaseModel):
     def _coerce_refund_flag(cls, v: Any) -> Any:
         """Accept the unambiguous spellings of a boolean, reject the rest.
 
-        ``true``/``"true"``/``1`` all mean the same thing in a hand-maintained
-        export and coercing them loses no information. Anything else keeps the
-        strict-boolean rejection so genuine junk still surfaces as an error.
+        true/"true"/1 mean the same thing in a hand-maintained export, and
+        coercing them loses no information. Anything else stays an error.
         """
         if v is None:
             return False
@@ -116,8 +113,8 @@ class LineItem:
 class Visit:
     """A validated visit with its money already reconciled.
 
-    The derived fields are computed once, here, so that reconciliation and
-    analytics never re-derive them and cannot disagree about what a visit means.
+    Derived fields are computed once here, so reconciliation and analytics never
+    re-derive them and cannot disagree about what a visit means.
     """
 
     clinic_id: str
@@ -251,9 +248,9 @@ _ROW_CONTAINER_KEYS = ("visits", "rows", "billing_log", "log", "entries", "data"
 def extract_rows(payload: Any) -> list[Any]:
     """Pull the visit rows out of whichever envelope the log arrived in.
 
-    Accepts a bare array of rows, or an object wrapping them under any of the
-    common container keys. A top-level ``clinic_id`` is pushed down onto rows
-    that omit it, so both flat and nested exports validate identically.
+    Accepts a bare array, or an object wrapping one under a common container key.
+    A top-level clinic_id is pushed onto rows that omit it, so flat and nested
+    exports validate identically.
     """
     if isinstance(payload, list):
         return payload
@@ -331,9 +328,9 @@ def load_payload(raw: str | bytes) -> Any:
 def parse_timestamp(raw: str) -> datetime:
     """Parse an ISO-8601 timestamp that must carry a UTC offset.
 
-    A naive timestamp is rejected rather than assumed to be UTC: hour-of-day
-    bucketing is one of the four things the clinic owner asks for, and silently
-    guessing the zone would put the peak hour in the wrong bucket.
+    A naive timestamp is rejected rather than assumed to be UTC. Hour-of-day
+    bucketing is one of the four things the owner asks for, and guessing the zone
+    would put the peak hour in the wrong bucket.
     """
     text = raw.strip()
     try:
@@ -353,14 +350,13 @@ def parse_timestamp(raw: str) -> datetime:
 def _build_visit(row: VisitIn, ts: datetime) -> tuple[Visit, list[str]]:
     """Apply the money semantics to a type-valid row.
 
-    Returns the visit plus any warning codes raised while normalising it. The
-    semantics here are the single definition used by every downstream layer:
+    The single definition used by every downstream layer:
 
-    * ``billed = max(0, gross - discount)`` and is always 0 for a refund visit.
-    * ``outstanding`` is per-visit, so an overpayment on one visit can never
-      cancel out an unpaid visit elsewhere in the day.
-    * a refund's amount is stored as a positive magnitude regardless of the sign
-      it arrived with.
+    * billed = max(0, gross - discount), and always 0 for a refund visit.
+    * outstanding is per-visit, so an overpayment on one visit cannot cancel out
+      an unpaid visit elsewhere in the day.
+    * a refund's amount is stored as a positive magnitude whatever sign it
+      arrived with.
     """
     warnings: list[str] = []
 
@@ -423,13 +419,17 @@ _WARNING_MESSAGES = {
 def parse_billing_log(payload: Any) -> ParsedDay:
     """Validate and normalise a whole day's billing log.
 
-    Every row is checked independently so the caller receives the complete list
-    of problems in one pass. Day-level invariants (one clinic, one date, unique
-    visit ids) are checked after the rows, against the rows that survived.
+    Every row is checked independently, so the caller gets the complete list of
+    problems in one pass. Day-level invariants (one clinic, one date, unique
+    visit ids) are checked afterwards against the rows that survived.
     """
     rows = extract_rows(payload)
 
     visits: list[Visit] = []
+    # Raw row index of each accepted visit, parallel to `visits`. Failing rows
+    # are dropped, so a visit's position stops matching the row it came from and
+    # the day-level checks below must still name the real one.
+    visit_rows: list[int] = []
     errors: list[RowError] = []
     warnings: list[RowWarning] = []
     seen_visit_ids: dict[str, int] = {}
@@ -541,6 +541,7 @@ def parse_billing_log(payload: Any) -> ParsedDay:
 
         visit, warning_codes = _build_visit(row, ts)
         visits.append(visit)
+        visit_rows.append(index)
         for code in warning_codes:
             warnings.append(
                 RowWarning(
@@ -551,7 +552,7 @@ def parse_billing_log(payload: Any) -> ParsedDay:
                 )
             )
 
-    _check_day_invariants(visits, errors, warnings, refund_sign_conventions)
+    _check_day_invariants(visits, visit_rows, errors, warnings, refund_sign_conventions)
     _check_drug_name_typos(visits, warnings)
 
     clinic_id = visits[0].clinic_id if visits else ""
@@ -569,22 +570,39 @@ def parse_billing_log(payload: Any) -> ParsedDay:
 
 def _check_day_invariants(
     visits: list[Visit],
+    visit_rows: list[int],
     errors: list[RowError],
     warnings: list[RowWarning],
     refund_sign_conventions: set[str],
 ) -> None:
-    """Enforce the file-level rules: one clinic, one business date."""
+    """Enforce the file-level rules: one clinic, one business date.
+
+    A row breaking either rule is removed from `visits`, not merely flagged.
+    These two checks used to report the row and keep it, which filed another
+    clinic's money under this one. A rejected row must not also be a counted row.
+
+    The file's identity comes from its first surviving row. Taking the majority
+    spelling would be a guess, and the day is echoed back with the rejects
+    attached so whoever owns the file can see which way it went.
+    """
     if not visits:
         return
 
     expected_clinic = visits[0].clinic_id
     expected_date = visits[0].business_date
 
-    for index, visit in enumerate(visits):
+    kept: list[Visit] = []
+    kept_rows: list[int] = []
+    dropped_rows: set[int] = set()
+
+    for visit, row_index in zip(visits, visit_rows):
+        offending = False
+
         if visit.clinic_id != expected_clinic:
+            offending = True
             errors.append(
                 RowError(
-                    row_index=index,
+                    row_index=row_index,
                     code="clinic_id_mismatch",
                     message=(
                         f"clinic_id '{visit.clinic_id}' does not match "
@@ -596,9 +614,10 @@ def _check_day_invariants(
                 )
             )
         if visit.business_date != expected_date:
+            offending = True
             errors.append(
                 RowError(
-                    row_index=index,
+                    row_index=row_index,
                     code="multiple_business_dates",
                     message=(
                         f"timestamp falls on {visit.business_date.isoformat()} but the file "
@@ -609,6 +628,19 @@ def _check_day_invariants(
                     hint="An end-of-day log covers a single UTC date; split the file per day.",
                 )
             )
+
+        if offending:
+            dropped_rows.add(row_index)
+        else:
+            kept.append(visit)
+            kept_rows.append(row_index)
+
+    if dropped_rows:
+        visits[:] = kept
+        visit_rows[:] = kept_rows
+        # A warning raised while normalising a row that is no longer part of the
+        # day would point at a visit absent from every figure on screen.
+        warnings[:] = [w for w in warnings if w.row_index not in dropped_rows]
 
     if len(refund_sign_conventions) > 1:
         warnings.append(
@@ -633,10 +665,9 @@ DRUG_NAME_SIMILARITY = 0.88
 def _check_drug_name_typos(visits: list[Visit], warnings: list[RowWarning]) -> None:
     """Flag near-identical drug names without merging them.
 
-    A misspelled drug splits one medicine across two rows of the rankings, which
-    quietly understates both. The fix belongs to whoever owns the data, though —
-    auto-correcting here would silently move revenue between line items on a
-    guess, so this only ever raises a warning and the totals stay as recorded.
+    A misspelled drug splits one medicine across two rows of the rankings and
+    understates both. Auto-correcting would move revenue between line items on a
+    guess, so this only warns and the totals stay as recorded.
     """
     totals: dict[str, int] = defaultdict(int)
     for visit in visits:

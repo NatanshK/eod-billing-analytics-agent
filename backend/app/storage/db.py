@@ -1,9 +1,8 @@
 """SQLite connection handling and schema.
 
-The store is deliberately thin. Only the *raw ingested rows* are persisted;
-reconciliation and analytics are recomputed from them on every read. Derived
-totals are never written to a table, so there is no second copy of the truth to
-drift out of sync with the first.
+Only raw ingested rows are persisted. Reconciliation and analytics are recomputed
+on every read, so there is no stored total that can drift from the data it
+summarises.
 """
 
 from __future__ import annotations
@@ -58,13 +57,9 @@ CREATE TABLE IF NOT EXISTS narratives (
 );
 """
 
-#: One connection for the whole process, guarded by a lock.
-#:
-#: A thread-local connection would be the usual choice, but it is wrong for an
-#: in-memory database: ``:memory:`` is scoped to its connection, so each request
-#: thread would silently get an empty database of its own. Sharing one connection
-#: keeps every worker looking at the same data in both modes, and the lock below
-#: keeps the explicit transactions from interleaving.
+#: One connection for the whole process, guarded by a lock. A thread-local
+#: connection is the usual choice but is wrong for ":memory:", which is scoped to
+#: its connection — each request thread would get an empty database of its own.
 _connection: sqlite3.Connection | None = None
 _connection_path: str | None = None
 _lock = threading.RLock()
@@ -76,10 +71,9 @@ def db_path() -> str:
 
 def _configure(conn: sqlite3.Connection) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
-    # Enforce the cascade from billing_days to visits rather than trusting callers.
     conn.execute("PRAGMA foreign_keys = ON")
-    # isolation_level=None hands transaction control to transaction(), which
-    # needs an explicit BEGIN IMMEDIATE around a day replacement.
+    # Hands transaction control to transaction(), which needs an explicit
+    # BEGIN IMMEDIATE around a day replacement.
     conn.isolation_level = None
     return conn
 
@@ -105,11 +99,25 @@ def get_connection() -> sqlite3.Connection:
 
 
 @contextmanager
-def transaction() -> Iterator[sqlite3.Connection]:
-    """Run a block inside one immediate transaction, serialised across threads.
+def serialised() -> Iterator[sqlite3.Connection]:
+    """Hold the connection lock without opening a transaction.
 
-    ``BEGIN IMMEDIATE`` takes the write lock up front, so two overlapping
-    ingests of the same day cannot interleave into a mixture of both.
+    The connection is process-wide, so a statement issued while another thread
+    holds BEGIN IMMEDIATE gets enlisted in that thread's transaction and can be
+    rolled back with it. Reads need the guard too, or they can observe a day
+    replacement half-applied.
+    """
+    conn = get_connection()
+    with _lock:
+        yield conn
+
+
+@contextmanager
+def transaction() -> Iterator[sqlite3.Connection]:
+    """Run a block in one immediate transaction, serialised across threads.
+
+    BEGIN IMMEDIATE takes the write lock up front, so two overlapping ingests of
+    the same day cannot interleave.
     """
     conn = get_connection()
     with _lock:

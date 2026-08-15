@@ -1,7 +1,7 @@
 """Guards on the property the brief calls out: the deterministic layer is ground
-truth and *never* calls an LLM.
+truth and never calls an LLM.
 
-A comment saying so would rot the first time someone adds an import. These tests
+A comment saying so would rot the first time someone added an import. These tests
 read the source instead.
 """
 

@@ -1,7 +1,7 @@
 """Daily analytics: revenue by hour and the two medicine rankings.
 
-Like :mod:`reconciliation`, everything here is a pure function of the visit list.
-No LLM, no network, no clock.
+Like reconciliation, a pure function of the visit list. No LLM, no network, no
+clock.
 """
 
 from __future__ import annotations
@@ -16,14 +16,14 @@ from .parsing import Visit
 DEFAULT_TOP_N = 5
 
 #: Line-item revenue is counted before visit-level discounts. A discount applies
-#: to the visit as a whole and cannot be fairly attributed across the drugs on
-#: it, so splitting it would invent a number. The basis is reported in the API
-#: response rather than left as a silent assumption.
+#: to the visit as a whole and cannot be fairly attributed across its drugs, so
+#: splitting it would invent a number. Reported in the API response rather than
+#: left as a silent assumption.
 REVENUE_BASIS = "gross_line_item_value_excluding_visit_discounts"
 
 
 def hour_label_short(hour: int) -> str:
-    """``9 -> "9am"``, ``12 -> "12pm"``, ``0 -> "12am"``."""
+    """9 -> "9am", 12 -> "12pm", 0 -> "12am"."""
     suffix = "am" if hour < 12 else "pm"
     display = hour % 12
     if display == 0:
@@ -32,7 +32,7 @@ def hour_label_short(hour: int) -> str:
 
 
 def hour_label(hour: int) -> str:
-    """``12 -> "12pm–1pm"`` — the form the dashboard and narrative both quote."""
+    """12 -> "12pm–1pm" — the form the dashboard and narrative both quote."""
     return f"{hour_label_short(hour)}–{hour_label_short((hour + 1) % 24)}"
 
 
@@ -100,12 +100,12 @@ class Analytics:
 def compute_analytics(visits: list[Visit], top_n: int = DEFAULT_TOP_N) -> Analytics:
     """Bucket revenue by hour and rank medicines two independent ways.
 
-    * Hourly revenue is *collected* money, with refunds subtracting from the hour
-      they were issued in — that is what the owner means by "which hour did the
-      most business".
-    * The rankings deliberately exclude refunded visits: a returned drug did not
-      move. They are computed separately and may disagree, which is the whole
-      point of showing both.
+    * Hourly revenue is collected money, with refunds subtracting from the hour
+      they were issued in — what the owner means by "which hour did the most
+      business".
+    * The rankings exclude refunded visits, since a returned drug did not move.
+      They are computed separately and may disagree, which is the point of
+      showing both.
     """
     hourly: dict[int, int] = defaultdict(int)
     qty_by_drug: dict[str, int] = defaultdict(int)
@@ -134,9 +134,9 @@ def compute_analytics(visits: list[Visit], top_n: int = DEFAULT_TOP_N) -> Analyt
 def _build_buckets(hourly: dict[int, int]) -> list[HourBucket]:
     """Return a contiguous span covering the clinic's active hours.
 
-    Hours between the first and last activity are emitted even when empty, so a
-    quiet mid-afternoon reads as a gap in the chart rather than silently closing
-    up and distorting the shape of the day.
+    Empty hours between the first and last activity are still emitted, so a quiet
+    mid-afternoon reads as a gap rather than closing up and distorting the shape
+    of the day.
     """
     if not hourly:
         return []
@@ -148,7 +148,7 @@ def _pick_peak(buckets: list[HourBucket]) -> HourBucket | None:
     """Busiest hour by revenue; ties resolve to the earlier hour.
 
     An all-zero or all-negative day has no meaningful peak, and claiming one
-    would put a number in the narrative that means nothing.
+    would put a meaningless number in the narrative.
     """
     if not buckets:
         return None

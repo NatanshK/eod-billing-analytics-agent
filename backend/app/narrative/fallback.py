@@ -1,12 +1,9 @@
 """The narrative of last resort.
 
-Assembled directly from the figure registry, so it is grounded by construction:
-there is no step at which a number could enter that did not come from the report.
-
-This exists so that the API's contract does not depend on a third party being up,
-fast, or well-behaved. A missing API key, a timeout, and a model that returns
-prose instead of JSON all land here, and the owner still gets their summary — the
-response says ``source: "fallback"`` so nobody mistakes it for model output.
+Assembled directly from the figure registry, so no number can enter that did not
+come from the report. A missing API key, a timeout, and a model returning prose
+all land here; the response says source="fallback" so nobody mistakes it for
+model output.
 """
 
 from __future__ import annotations
@@ -16,9 +13,9 @@ import json
 from ..core.figures import FigureRegistry
 from .validator import GroundedNarrative, ground
 
-#: Written in the same token language the model is asked to use, then put through
-#: the *same* four gates. If a template ever drifts out of sync with the registry
-#: it fails loudly in tests rather than silently emitting a broken sentence.
+#: Written in the same token language the model is asked to use. A template that
+#: drifts out of sync with the registry fails loudly in tests rather than
+#: emitting a broken sentence.
 GREETING = "Good evening! Here's today's summary for {{clinic_name}} ({{business_date}}):"
 
 CAVEAT = (
@@ -28,7 +25,7 @@ CAVEAT = (
 
 
 def _sentences(registry: FigureRegistry) -> list[str]:
-    """Build the body from whichever figures this day actually has."""
+    """Build the body from whichever figures this day has."""
     lines: list[str] = []
 
     if "collection_rate" in registry:
@@ -63,10 +60,8 @@ def _sentences(registry: FigureRegistry) -> list[str]:
 def build_fallback(registry: FigureRegistry, reason: str | None = None) -> GroundedNarrative:
     """Compose the deterministic summary for this day.
 
-    Note that this goes through :func:`ground` like any model draft rather than
-    being trusted for being ours. The template is only as grounded as the gates
-    prove it to be, and running them here means the fallback path is exercised by
-    every grounding test in the suite.
+    Goes through ground() like any model draft rather than being trusted for
+    being ours, which also means every grounding test exercises this path.
     """
     draft = {
         "greeting": GREETING,

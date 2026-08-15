@@ -1,8 +1,7 @@
 """Narrative generation, end to end.
 
-The control flow is deliberately boring, because the interesting property is what
-it *cannot* do: there is no path through this module that returns an ungrounded
-narrative, and no path that turns a provider failure into a 5xx.
+No path through this module returns an ungrounded narrative, and none turns a
+provider failure into a 5xx.
 
     try the model  ->  gates pass?  -> return it, source="llm"
                    ->  gates fail?  -> one repair attempt
@@ -37,8 +36,8 @@ def generate_narrative(
 ) -> GroundedNarrative:
     """Produce a grounded, owner-facing summary of this clinic-day.
 
-    Never raises for a model problem. The worst case is a deterministic summary
-    with ``source="fallback"`` and a reason the UI can show.
+    Never raises for a model problem. Worst case is a deterministic summary with
+    source="fallback" and a reason the UI can show.
     """
     registry = build_registry(
         reconciliation,
@@ -61,8 +60,8 @@ def _try_model(
 ) -> tuple[GroundedNarrative | None, str | None]:
     """Attempt model generation with exactly one corrective retry.
 
-    Returns ``(narrative, None)`` on success or ``(None, reason)`` on any
-    failure, so the caller can report *why* it fell back.
+    Returns (narrative, None) on success or (None, reason) on failure, so the
+    caller can report why it fell back.
     """
     if provider is None:
         from .provider import default_provider
@@ -87,8 +86,6 @@ def _try_model(
         first_gate, first_reason = exc.gate, exc.reason
         log.info("model draft rejected at gate '%s': %s", first_gate, first_reason)
 
-    # One repair round-trip. A model that breaks the contract twice will not
-    # honour it on a third attempt, and the owner is waiting on the response.
     try:
         repaired = provider.complete(build_repair_messages(registry, raw, first_reason))
     except ProviderError as exc:

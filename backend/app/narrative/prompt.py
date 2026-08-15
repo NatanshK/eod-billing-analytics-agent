@@ -1,9 +1,8 @@
 """Prompt construction for the narrative layer.
 
-The prompt does not ask the model to be careful with numbers. It removes its
-ability to write them: the vocabulary it is given contains tokens, and the
-validator rejects digits. Prompt wording is a convenience for getting good prose
-on the first try — the guarantee lives in :mod:`validator`, not here.
+The prompt is a convenience for getting good prose on the first try. It is not
+where the grounding guarantee lives — that is in validator.py, which rejects any
+digit the model writes regardless of what it was asked.
 """
 
 from __future__ import annotations
@@ -27,8 +26,13 @@ afterwards.
 
 - Use only keys from the FIGURES list. A key that is not on the list will be \
 rejected and your whole response discarded.
-- Do not restate a figure's value in words either ("about forty thousand rupees" \
-is as wrong as "40000").
+- Never spell a number out either. "three refunds" is exactly as wrong as "3 \
+refunds" — write {{refund_count}}. This includes one, two, three, ten, hundred, \
+thousand, lakh, crore.
+- Each figure already renders as a complete phrase **including its unit**: \
+`visit_count` renders to "18 visits", not "18". So write "across \
+{{visit_count}}", never "across {{visit_count}} visits" — that would read as \
+"18 visits visits". Check `renders_to` before adding a word after a key.
 - If something is not in the FIGURES list, you do not know it. Do not estimate, \
 infer, or imply it.
 - Some metrics cannot be computed from this data at all; they are listed under \
@@ -44,7 +48,6 @@ Return a single JSON object, no markdown fence:
 
 
 def build_user_prompt(registry: FigureRegistry) -> str:
-    """Render the figure vocabulary and the unavailable-metric list."""
     figures = [
         {"key": f.key, "renders_to": f.display, "means": f.description} for f in registry
     ]
@@ -76,10 +79,10 @@ REPAIR_INSTRUCTION = (
 def build_repair_messages(
     registry: FigureRegistry, previous: str, reason: str
 ) -> list[dict[str, str]]:
-    """One corrective round-trip before giving up on the model.
+    """One corrective round-trip before giving up.
 
-    Worth exactly one retry: a model that ignores the contract twice is not going
-    to honour it on the third attempt, and the owner is waiting.
+    Worth exactly one retry: a model that ignores the contract twice will not
+    honour it on the third, and the owner is waiting.
     """
     return [
         *build_messages(registry),

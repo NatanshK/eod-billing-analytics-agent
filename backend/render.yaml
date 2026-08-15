@@ -19,7 +19,10 @@ services:
         sync: false # set to the deployed frontend origin
       - key: OPENROUTER_API_KEY
         sync: false # set in the Render dashboard; absent = deterministic fallback
+      # A free-tier model, so the deployed demo costs nothing to run.
       - key: OPENROUTER_MODEL
-        value: qwen/qwen-2.5-72b-instruct
+        value: nvidia/nemotron-3-super-120b-a12b:free
+      - key: LLM_REASONING_EFFORT
+        value: none
       - key: PYTHON_VERSION
         value: "3.13.3"

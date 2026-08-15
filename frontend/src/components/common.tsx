@@ -44,8 +44,8 @@ export function Loading({ label = "Loading…" }: { label?: string }) {
 /**
  * Renders an API failure using the server's own words.
  *
- * A 404 here is usually "this day was never ingested", which is an empty state
- * rather than an error, so it gets calmer framing and the endpoint hint.
+ * A 404 is usually "this day was never ingested" — an empty state rather than an
+ * error — so it gets calmer framing and the endpoint hint.
  */
 export function ErrorState({ error, onRetry }: { error: ApiError; onRetry?: () => void }) {
   const isEmpty = error.isNotFound;
@@ -76,10 +76,16 @@ export function ErrorState({ error, onRetry }: { error: ApiError; onRetry?: () =
 }
 
 /**
- * Discloses rows that did not make it into the totals.
+ * Data-quality disclosure, collapsed to one line.
  *
- * Shown on every screen, because a stat card reading "₹3,190 billed" is
- * misleading on its own when a row was quarantined on the way in.
+ * Two things are in tension. The screens are specified down to their stat cards,
+ * and a permanent banner pushes that layout down the page on every load. But a
+ * card reading "₹3,190 billed" is misleading on its own when a row was dropped
+ * on the way in.
+ *
+ * A disclosure settles both: the layout matches, and the caveat still sits above
+ * the figures, reachable before the number is read. Native <details>, so it is
+ * keyboard-operable and open to in-page search with no state to manage.
  */
 export function DataQualityNotice({
   rejected,
@@ -94,9 +100,33 @@ export function DataQualityNotice({
 }) {
   if (rejected.length === 0 && warnings.length === 0) return null;
 
+  // Only a rejection changes the figures; a warning just annotates them. The
+  // summary leads with whichever is the stronger claim.
+  const excluded = rejected.length > 0;
+  const summary = [
+    excluded ? `${rowCount} of ${rowsReceived} rows included` : null,
+    warnings.length > 0
+      ? `${warnings.length} data note${warnings.length === 1 ? "" : "s"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="stack">
-      {rejected.length > 0 && (
+    <details className="disclosure">
+      <summary className="disclosure__summary">
+        <span
+          className={`disclosure__dot${excluded ? " disclosure__dot--warn" : ""}`}
+          aria-hidden="true"
+        />
+        <span className="disclosure__label">{summary}</span>
+        <span className="disclosure__chevron" aria-hidden="true">
+          ›
+        </span>
+      </summary>
+
+      <div className="stack disclosure__body">
+        {rejected.length > 0 && (
         <div className="notice notice--warn">
           <div className="notice__title">
             {rowCount} of {rowsReceived} rows are included in these figures
@@ -130,6 +160,7 @@ export function DataQualityNotice({
           </ul>
         </div>
       )}
-    </div>
+      </div>
+    </details>
   );
 }

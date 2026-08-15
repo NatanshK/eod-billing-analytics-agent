@@ -25,7 +25,7 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* Above the router: the selected clinic-day persists across all three screens. */}
+    {/* Above the router, so the selected day persists across all three screens. */}
     <DayProvider>
       <RouterProvider router={router} />
     </DayProvider>

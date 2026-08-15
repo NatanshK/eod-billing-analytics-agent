@@ -1,38 +1,15 @@
 /**
  * The clinic and business date every screen is looking at.
  *
- * Held above the router so switching screens keeps the selected day — the three
+ * Held above the router, so switching screens keeps the selected day. The three
  * screens are three views of one report, not three independent pages.
  */
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { api, ApiError } from "../api/client";
 import type { DaySummary } from "../api/types";
-
-interface DayContextValue {
-  clinicId: string | null;
-  clinicName: string;
-  clinicLocation: string;
-  clinicOwner: string;
-  date: string | null;
-  days: DaySummary[];
-  loading: boolean;
-  error: ApiError | null;
-  setDate: (date: string) => void;
-  /** Step through the ingested days; the picker is a stepper, not a calendar. */
-  step: (delta: number) => void;
-}
-
-const DayContext = createContext<DayContextValue | null>(null);
+import { DayContext, type DayContextValue } from "./day-context";
 
 export function DayProvider({ children }: { children: ReactNode }) {
   const [clinicId, setClinicId] = useState<string | null>(null);
@@ -111,10 +88,4 @@ export function DayProvider({ children }: { children: ReactNode }) {
   );
 
   return <DayContext.Provider value={value}>{children}</DayContext.Provider>;
-}
-
-export function useDay(): DayContextValue {
-  const value = useContext(DayContext);
-  if (!value) throw new Error("useDay must be used inside a DayProvider");
-  return value;
 }

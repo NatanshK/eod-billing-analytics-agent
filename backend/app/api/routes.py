@@ -1,10 +1,9 @@
 """REST endpoints.
 
-Route handlers stay thin on purpose: they resolve arguments, call into the core
-or storage layer, and shape the response. Every failure mode they can produce is
-mapped to a typed exception in :mod:`app.core.errors`, which
-:mod:`app.main` turns into a structured response — so no bad input path ends in a
-generic 500.
+Handlers stay thin: resolve arguments, call into core or storage, shape the
+response. Every failure they can produce is a typed exception from
+app.core.errors, which app.main turns into a structured response, so no bad input
+path ends in a generic 500.
 """
 
 from __future__ import annotations
@@ -32,10 +31,10 @@ router = APIRouter(prefix=API_PREFIX)
 
 
 async def _read_payload(request: Request) -> Any:
-    """Accept the log as a JSON body or as an uploaded file, indifferently.
+    """Accept the log as a JSON body or an uploaded file.
 
-    A clinic exports a file; a test or an integration posts JSON. Supporting
-    both costs one branch and saves the caller from caring.
+    A clinic exports a file; a test or integration posts JSON. Supporting both
+    costs one branch.
     """
     content_type = (request.headers.get("content-type") or "").lower()
 
@@ -95,12 +94,12 @@ async def ingest_billing_log(
 ) -> dict[str, Any]:
     """Validate and store one clinic-day.
 
-    A bad row does not sink the day. It is quarantined, stored beside the day and
-    echoed in *every* report response for it, so the totals are visibly "18 of 19
-    rows" rather than quietly short. ``strict=true`` gets all-or-nothing instead.
+    A bad row does not sink the day: it is quarantined, stored beside the day and
+    echoed in every report response for it, so the totals read "18 of 19 rows"
+    rather than being quietly short. strict=true gets all-or-nothing instead.
 
-    A day with no rows at all is a real thing — a closed clinic — but it carries
-    no clinic or date to file it under, so those must be supplied explicitly.
+    A day with no rows is a real thing — a closed clinic — but carries no clinic
+    or date to file it under, so those must be supplied explicitly.
     """
     payload = await _read_payload(request)
     rows = extract_rows(payload)
@@ -116,7 +115,7 @@ async def ingest_billing_log(
     rejected = [e.to_dict() for e in parsed.errors]
     parsed.errors = []  # what remains is exactly what will be stored
 
-    _apply_explicit_identity(parsed, clinic_id, business_date, rejected)
+    _apply_explicit_identity(parsed, clinic_id, business_date)
 
     record = repo.save_day(parsed, rows, rejected=rejected, rows_received=parsed.rows_seen)
 
@@ -129,13 +128,13 @@ async def ingest_billing_log(
 
 
 def _apply_explicit_identity(
-    parsed, clinic_id: str | None, business_date: str | None, rejected: list[dict[str, Any]]
+    parsed, clinic_id: str | None, business_date: str | None
 ) -> None:
     """Resolve which clinic and date this upload belongs to.
 
-    Normally both are read off the rows. An empty log has no rows to read, so the
-    caller supplies them; and when the caller supplies them alongside real rows,
-    a disagreement is a filing error worth catching rather than overriding.
+    Normally read off the rows. An empty log has none, so the caller supplies
+    them — and when supplied alongside real rows, a disagreement is a filing
+    error worth catching rather than overriding.
     """
     if business_date is not None:
         try:
@@ -298,8 +297,7 @@ def create_narrative(
     """Generate the owner-facing summary for a day.
 
     Cached against the hash of the rows it describes, so re-ingesting a corrected
-    day invalidates it automatically rather than leaving a stale summary attached
-    to fresh numbers.
+    day invalidates it automatically.
     """
     parsed, record = reports.day_context(clinic_id, business_date)
 
@@ -351,7 +349,7 @@ def get_cached_narrative(clinic_id: str, business_date: str) -> dict[str, Any]:
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    """Liveness, plus whether a narrative would come from the model or the fallback."""
+    """Liveness, and whether a narrative would come from the model or the fallback."""
     provider = default_provider()
     return {
         "status": "ok",

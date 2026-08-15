@@ -1,13 +1,9 @@
-"""Money handling.
+"""Integer-paise money handling.
 
-Every monetary value in this service is an ``int`` number of paise. Rupee floats
-never appear: they are lossy under addition, and the reconciliation totals here
-are compared for exact equality against the narrative layer's traced figures.
-
-The formatter in this module is the *only* place paise become a display string.
-``frontend/src/lib/money.ts`` is a character-for-character port of it — the
-Traced Figures panel matches rendered strings, so any divergence between the two
-would surface as a false grounding failure.
+Floats never appear: they are lossy under addition, and these totals are compared
+for exact equality against the narrative's traced figures. frontend/src/lib/money.ts
+is a port of this file — if the two formatters diverge, a correct narrative looks
+like a grounding failure.
 """
 
 from __future__ import annotations
@@ -16,9 +12,9 @@ RUPEE = "₹"
 
 
 def group_indian(digits: str) -> str:
-    """Group an integer digit-string in the Indian system: 1234567 -> 12,34,567.
+    """Group digits the Indian way: 1234567 -> 12,34,567.
 
-    The last three digits form one group; everything above is grouped in twos.
+    Last three digits form one group; everything above is grouped in twos.
     """
     if len(digits) <= 3:
         return digits
@@ -33,12 +29,7 @@ def group_indian(digits: str) -> str:
 
 
 def format_paise(paise: int) -> str:
-    """Render integer paise as a rupee string.
-
-    Whole rupees print without a decimal part (``4285000 -> "₹42,850"``); a
-    non-zero paise remainder prints two decimal places (``4285050 -> "₹42,850.50"``).
-    Negative amounts carry a leading minus before the currency symbol.
-    """
+    """319000 -> "₹3,190". 4285050 -> "₹42,850.50". Minus goes before the symbol."""
     if not isinstance(paise, int) or isinstance(paise, bool):
         raise TypeError(f"format_paise expects int paise, got {type(paise).__name__}")
 
@@ -51,11 +42,10 @@ def format_paise(paise: int) -> str:
 
 
 def percent(numerator: int, denominator: int) -> int | None:
-    """Integer percentage, or ``None`` when the denominator is zero.
+    """Integer percentage, or None when nothing was billed.
 
-    Returning ``None`` rather than 0 matters: a day with nothing billed has an
-    *undefined* collection rate, and the UI must say so instead of showing "0%",
-    which reads as a catastrophically bad day rather than an empty one.
+    None rather than 0: an empty day has an undefined collection rate, and "0%"
+    reads as a disastrous day rather than a quiet one.
     """
     if denominator == 0:
         return None

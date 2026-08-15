@@ -230,6 +230,66 @@ def test_two_dates_in_one_file_is_rejected():
     assert "2026-07-28" in err.message
 
 
+@pytest.mark.parametrize(
+    "overrides,code",
+    [
+        ({"clinic_id": "C-2"}, "clinic_id_mismatch"),
+        ({"timestamp": "2026-07-28T10:00:00Z"}, "multiple_business_dates"),
+    ],
+)
+def test_a_row_failing_a_day_invariant_is_dropped_not_just_flagged(overrides, code):
+    """A rejected row must not also be a counted row.
+
+    Reporting the row and keeping it was the worst of both: the foreign clinic's
+    money landed in this day's totals while the response claimed the row had been
+    dropped, so "17 of 18 rows are included" was a lie in the honest direction.
+    """
+    rows = _row() + _row(visit_id="V-2", amount_paid_paise=50000, **overrides)
+    parsed = parse_billing_log(rows)
+
+    assert [e.code for e in parsed.errors] == [code]
+    assert [v.visit_id for v in parsed.visits] == ["V-1"]
+    # The surviving row paid ₹10; the rejected one must not add its ₹500.
+    assert sum(v.collected_paise for v in parsed.visits) == 1000
+    assert parsed.rows_seen == 2  # the day still admits it received two rows
+
+
+def test_day_invariant_errors_name_the_raw_row_not_the_surviving_position():
+    """The row index has to survive earlier rejections shifting the list.
+
+    `visits` is compacted as rows fail, so its positions stop matching the file's
+    line numbering. Row 0 here is rejected outright, which puts the offending
+    row at visits-position 1 but raw row 2 — and the caller is looking at the
+    file, not at our list.
+    """
+    rows = (
+        _row(visit_id="V-0", payment_mode="cheque")
+        + _row(visit_id="V-1")
+        + _row(visit_id="V-2", clinic_id="C-2")
+    )
+    parsed = parse_billing_log(rows)
+
+    mismatch = next(e for e in parsed.errors if e.code == "clinic_id_mismatch")
+    assert mismatch.row_index == 2
+    assert mismatch.visit_id == "V-2"
+
+
+def test_a_warning_does_not_outlive_the_row_that_raised_it():
+    """A warning about a dropped row points at a visit absent from the figures.
+
+    Both rows here overpay, so the filter has to remove one warning and keep the
+    other — asserting only that the count fell would pass on a filter that threw
+    away everything.
+    """
+    rows = _row(amount_paid_paise=99999) + _row(
+        visit_id="V-2", clinic_id="C-2", amount_paid_paise=88888
+    )
+    parsed = parse_billing_log(rows)
+
+    assert [v.visit_id for v in parsed.visits] == ["V-1"]
+    assert [(w.code, w.visit_id) for w in parsed.warnings] == [("overpayment", "V-1")]
+
+
 def test_business_date_is_derived_from_the_timestamps(happy_day):
     parsed = parse_billing_log(happy_day)
 

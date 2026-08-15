@@ -1,10 +1,11 @@
 """LLM transport.
 
-An OpenAI-compatible chat-completions client, pointed at OpenRouter by default
-so any Qwen model can be selected by name without a code change. Everything the
-service needs from a provider is the :class:`LLMProvider` protocol — two lines —
-which is what makes the grounding tests able to inject a model that misbehaves on
-purpose.
+An OpenAI-compatible chat-completions client, pointed at OpenRouter by default.
+The service depends only on the LLMProvider protocol, which is what lets the
+grounding tests inject a model that misbehaves on purpose.
+
+Every remote failure here is raised as ProviderError. The service catches it and
+falls back, so a third party being down never reaches the client as a 5xx.
 """
 
 from __future__ import annotations
@@ -15,20 +16,32 @@ from typing import Protocol
 import httpx
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "qwen/qwen-2.5-72b-instruct"
-DEFAULT_TIMEOUT_SECONDS = 25.0
+
+#: A free-tier model by default, so a reviewer with a fresh OpenRouter key sees
+#: model-written narratives without spending anything. Any OpenAI-compatible
+#: model id works; only the name changes.
+DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+
+#: Free-tier requests queue behind paid ones, so the ceiling is generous.
+DEFAULT_TIMEOUT_SECONDS = 45.0
+
+#: Room for the JSON plus slack. A tight budget truncates the response, which
+#: fails gate 1 for a reason unrelated to grounding.
+DEFAULT_MAX_TOKENS = 2000
+
+#: The figures are fixed by the registry and the model only chooses phrasing, so
+#: thinking tokens buy nothing — and on a hybrid model they come out of the same
+#: budget as the answer. "none" disables reasoning; "exclude" would only hide it
+#: while still paying for it.
+DEFAULT_REASONING_EFFORT = "none"
 
 
 class ProviderError(Exception):
-    """The model could not be reached or refused to answer.
-
-    Always caught by the service, which falls back. It never reaches the client
-    as a 5xx — an unavailable third party is not the clinic's problem.
-    """
+    """The model could not be reached or refused to answer."""
 
 
 class ProviderNotConfigured(ProviderError):
-    """No API key is set. Expected in local development and on a demo deploy."""
+    """No API key set. Expected in local development and on a demo deploy."""
 
 
 class LLMProvider(Protocol):
@@ -51,6 +64,10 @@ class OpenRouterProvider:
         self.timeout = timeout if timeout is not None else float(
             os.environ.get("LLM_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
         )
+        self.max_tokens = int(os.environ.get("LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
+        self.reasoning_effort = os.environ.get(
+            "LLM_REASONING_EFFORT", DEFAULT_REASONING_EFFORT
+        )
 
     @property
     def is_configured(self) -> bool:
@@ -66,8 +83,11 @@ class OpenRouterProvider:
             # Low but non-zero: the figures are fixed by the contract, so the only
             # thing temperature varies is phrasing.
             "temperature": 0.2,
-            "max_tokens": 700,
+            "max_tokens": self.max_tokens,
             "response_format": {"type": "json_object"},
+            # OpenRouter drops parameters a model does not support, so this is
+            # inert against a non-reasoning model.
+            "reasoning": {"effort": self.reasoning_effort},
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -101,8 +121,8 @@ class OpenRouterProvider:
 def _extract_content(response: httpx.Response) -> str:
     """Pull the message text out, treating a surprising shape as a provider error.
 
-    A gateway that returns 200 with an error body is common enough to be worth
-    handling explicitly — letting a KeyError escape here would surface as a 500.
+    A gateway returning 200 with an error body is common enough to handle
+    explicitly; letting a KeyError escape here would surface as a 500.
     """
     try:
         body = response.json()

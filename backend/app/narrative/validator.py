@@ -1,17 +1,15 @@
 """Grounding enforcement for model output.
 
-Four gates, in order. A draft that fails any of them is discarded whole — there
-is no partial acceptance, because a summary that is half-checked is not checked.
+Four gates, in order. A draft failing any of them is discarded whole; a summary
+that is half-checked is not checked.
 
-The gates only work because of the shape of the contract: the model writes
-``{{total_billed}}``, never ``₹42,850``. So the question is never the fuzzy "does
-this number look like one of ours?" but the exact "does this token resolve?".
+The gates work because of the shape of the contract: the model writes
+{{total_billed}}, never ₹42,850. The question is never "does this number look
+like one of ours?" but "does this token resolve?".
 
-Gate 4 deserves a note. After substitution it re-scans the *rendered* text and
-requires every digit to sit inside a span that substitution produced. That is
-the same audit an automated grader would run on the finished narrative, run on
-ourselves before we return it — so a bug in the substitution step itself cannot
-put an untraceable digit in front of the clinic owner.
+Gate 4 re-scans the rendered text and requires every digit to sit inside a span
+substitution produced — the same audit a grader would run, run on ourselves, so
+a bug in substitution cannot put an untraceable digit in front of the owner.
 """
 
 from __future__ import annotations
@@ -28,8 +26,26 @@ from ..core.figures import Figure, FigureRegistry
 TOKEN_RE = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
 DIGIT_RE = re.compile(r"\d")
 
-#: Claims this dataset cannot support. Permitted in the caveat — that is where
-#: the model is *supposed* to say the number is unavailable — and nowhere else.
+#: Quantities spelled out as words. Found in live output: asked for no digits,
+#: the model wrote "Three refunds were processed" instead of citing
+#: {{refund_count}}. The figure was right, but nothing had checked it.
+#:
+#: "one" is included despite being a common pronoun, with the two idioms that
+#: would trip it excluded below. A false positive costs a repair round-trip and
+#: at worst the fallback — still correct output. A false negative puts an
+#: unverified number in front of the owner.
+NUMBER_WORD_RE = re.compile(
+    r"\b(?!one\s+of\b)(?<!no\s)("
+    r"zero|nil|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
+    r"fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|"
+    r"fifty|sixty|seventy|eighty|ninety|hundred|thousand|lakh|lakhs|crore|"
+    r"crores|million|billion|dozen"
+    r")\b",
+    re.IGNORECASE,
+)
+
+#: Claims this dataset cannot support. Permitted in the caveat, where the model
+#: is supposed to say the number is unavailable, and nowhere else.
 UNSUPPORTED_CLAIM_RE = re.compile(
     r"\b(profits?|margins?|markups?|cogs|cost\s+price|purchase\s+price|net\s+worth)\b",
     re.IGNORECASE,
@@ -49,7 +65,7 @@ class GroundingError(Exception):
 
 
 class NarrativeDraft(BaseModel):
-    """The exact shape the model is asked to return."""
+    """The shape the model is asked to return."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -129,9 +145,9 @@ def validate_schema(payload: dict) -> NarrativeDraft:
 
 
 def audit_draft(draft: NarrativeDraft, registry: FigureRegistry) -> list[str]:
-    """Check the draft *before* any substitution happens.
+    """Check the draft before any substitution happens.
 
-    Returns the token keys it cites, in order of first appearance. Raises if the
+    Returns the token keys cited, in order of first appearance. Raises if the
     model wrote a literal number, cited a figure that does not exist, or made a
     claim this dataset cannot support.
     """
@@ -151,13 +167,21 @@ def audit_draft(draft: NarrativeDraft, registry: FigureRegistry) -> list[str]:
             if key not in seen:
                 seen.append(key)
 
-        # Any digit that is not part of a token is a number the model invented.
+        # Any number that is not part of a token is one the model invented —
+        # whether it wrote it in digits or spelled it out.
         residue = TOKEN_RE.sub("", text)
-        if DIGIT_RE.search(residue):
-            literal = DIGIT_RE.search(residue).group()
+        digit = DIGIT_RE.search(residue)
+        if digit:
             raise GroundingError(
                 "literal_number",
-                f"{where} contains the literal digit '{literal}' outside a figure token",
+                f"{where} contains the literal digit '{digit.group()}' outside a figure token",
+            )
+
+        spelled = NUMBER_WORD_RE.search(residue)
+        if spelled:
+            raise GroundingError(
+                "spelled_number",
+                f"{where} spells out the number '{spelled.group()}' instead of citing a figure",
             )
 
         if not is_caveat:
@@ -187,9 +211,8 @@ def _describe(index: int, authored_count: int) -> str:
 def render(text: str, registry: FigureRegistry) -> tuple[str, list[tuple[int, int]]]:
     """Substitute tokens, recording the span each substitution occupies.
 
-    The spans are what makes the final audit exact: rather than guessing whether
-    a digit in the output "looks like" a report figure, we know precisely which
-    characters came from the registry.
+    The spans make the final audit exact: rather than guessing whether a digit
+    looks like a report figure, we know which characters came from the registry.
     """
     out: list[str] = []
     spans: list[tuple[int, int]] = []
@@ -214,6 +237,30 @@ def render(text: str, registry: FigureRegistry) -> tuple[str, list[tuple[int, in
     return "".join(out), spans
 
 
+def assert_no_repeated_unit(rendered: str, spans: list[tuple[int, int]], where: str) -> None:
+    """Catch a unit written twice because the figure already carried it.
+
+    Figures render as complete phrases — visit_count is "18 visits", not "18" —
+    so "{{visit_count}} visits" produces "18 visits visits". The number is traced
+    and correct; the prose is not sendable. Same treatment as any rejected draft.
+    """
+    for start, end in spans:
+        trailing = rendered[:end].split()
+        if not trailing:
+            continue
+        unit = trailing[-1].strip(".,;:!?()").lower()
+        if not unit or not unit.isalpha():
+            continue
+
+        following = rendered[end:].lstrip()
+        word = following.split(" ")[0].strip(".,;:!?()").lower() if following else ""
+        if word and word == unit:
+            raise GroundingError(
+                "repeated_unit",
+                f"{where} repeats the unit '{unit}', which the figure already includes",
+            )
+
+
 def assert_every_digit_is_traced(rendered: str, spans: list[tuple[int, int]], where: str) -> None:
     """Every digit in the finished text must have come from the registry."""
     for match in DIGIT_RE.finditer(rendered):
@@ -233,8 +280,8 @@ def assert_every_digit_is_traced(rendered: str, spans: list[tuple[int, int]], wh
 def ground(raw_response: str, registry: FigureRegistry) -> GroundedNarrative:
     """Run all four gates over a raw model response.
 
-    Raises :class:`GroundingError` on any failure; the caller falls back rather
-    than trying to salvage a partially trustworthy summary.
+    Raises GroundingError on any failure; the caller falls back rather than
+    salvaging a partially trustworthy summary.
     """
     payload = parse_json(raw_response)
     draft = validate_schema(payload)
@@ -243,14 +290,17 @@ def ground(raw_response: str, registry: FigureRegistry) -> GroundedNarrative:
     authored = [draft.greeting, *draft.body_lines]
     lines: list[str] = []
     for index, text in enumerate(authored):
+        where = _describe(index, len(authored))
         rendered, spans = render(text, registry)
-        assert_every_digit_is_traced(rendered, spans, _describe(index, len(authored)))
+        assert_every_digit_is_traced(rendered, spans, where)
+        assert_no_repeated_unit(rendered, spans, where)
         rendered = rendered.strip()
         if rendered:
             lines.append(rendered)
 
     caveat_text, caveat_spans = render(draft.caveat, registry)
     assert_every_digit_is_traced(caveat_text, caveat_spans, "the caveat")
+    assert_no_repeated_unit(caveat_text, caveat_spans, "the caveat")
 
     if not lines:
         raise GroundingError("schema", "the narrative rendered to no visible text")

@@ -1,8 +1,7 @@
 """Report assembly — the one place a stored day becomes an API payload.
 
-Every read path goes through here, so the reconciliation screen, the analytics
-screen and the narrative all describe the same recomputed report rather than
-three separately derived views of it.
+Every read path goes through here, so all three screens describe the same
+recomputed report rather than three separately derived views of it.
 """
 
 from __future__ import annotations
@@ -35,8 +34,8 @@ def day_header(parsed: ParsedDay, record: DayRecord) -> dict[str, Any]:
         "row_count": record.row_count,
         "rows_received": record.rows_received,
         "warnings": record.warnings,
-        # Repeated on every report so a screen can never present totals without
-        # disclosing that some rows did not make it into them.
+        # On every report, so no screen can present totals without disclosing
+        # that some rows did not make it into them.
         "rejected_rows": record.rejected,
     }
 
@@ -66,5 +65,5 @@ def build_full_report(
 
 
 def computed(parsed: ParsedDay, top_n: int = DEFAULT_TOP_N) -> tuple[Reconciliation, Analytics]:
-    """The two ground-truth objects, for the narrative layer to be grounded in."""
+    """The two ground-truth objects the narrative layer is grounded in."""
     return reconcile(parsed.visits), compute_analytics(parsed.visits, top_n=top_n)

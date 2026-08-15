@@ -1,21 +1,15 @@
 """Persistence for ingested billing days.
 
-**How consistency is maintained on update** — the question the README is asked to
-answer, implemented here:
+How consistency is maintained on update:
 
-1. A day is *replaced*, never patched. Re-ingesting ``(clinic_id, business_date)``
-   deletes the old rows and inserts the new ones inside a single
-   ``BEGIN IMMEDIATE`` transaction, so a concurrent reader sees either the whole
-   old day or the whole new one — never a half-written mixture.
-2. Validation completes *before* the transaction opens. A payload with a bad row
-   never reaches the database at all.
-3. Only raw rows are stored. Reconciliation and analytics are recomputed from
-   them on every read, so there is no cached total that can disagree with the
-   data it summarises.
-4. The narrative — the one expensive derived artefact — is cached against the
-   SHA-256 of the rows it described. Correcting a day changes that hash and the
-   cached summary stops being served, rather than lingering next to numbers it
-   no longer matches.
+1. A day is replaced, never patched. Re-ingesting (clinic_id, business_date)
+   deletes and re-inserts inside one BEGIN IMMEDIATE transaction, so a reader
+   sees the whole old day or the whole new one.
+2. Validation completes before the transaction opens, so a payload with a bad row
+   never reaches the database.
+3. Only raw rows are stored; totals are recomputed on every read.
+4. The narrative is cached against the SHA-256 of the rows it described, so
+   correcting a day makes the old summary unfindable rather than stale.
 """
 
 from __future__ import annotations
@@ -28,13 +22,11 @@ from typing import Any
 
 from ..core.errors import DayNotFoundError
 from ..core.parsing import ParsedDay, parse_billing_log
-from .db import get_connection, transaction
+from .db import serialised, transaction
 
 
 @dataclass(frozen=True)
 class DayRecord:
-    """Metadata about one stored clinic-day."""
-
     clinic_id: str
     business_date: str
     payload_hash: str
@@ -62,9 +54,8 @@ def compute_payload_hash(
 ) -> str:
     """A stable fingerprint of a day's rows.
 
-    Keys are sorted and the rows are serialised canonically, so re-uploading the
-    same data — however the exporter happened to order its JSON keys — produces
-    the same hash and does not needlessly invalidate the cached narrative.
+    Keys are sorted before hashing, so re-uploading the same data in a different
+    key order produces the same hash and does not burn a model call.
     """
     canonical = json.dumps(
         {"accepted": rows, "rejected": rejected or []},
@@ -82,9 +73,9 @@ def _now() -> str:
 def _normalise_rows(parsed: ParsedDay, raw_rows: list[Any]) -> list[dict[str, Any]]:
     """Keep the accepted rows, with clinic_id resolved onto each one.
 
-    Storing the row as it will be re-parsed (rather than as it arrived) means a
-    reload reproduces exactly the same visits, including when the uploader named
-    the clinic once at the top of the file.
+    Stored as it will be re-parsed rather than as it arrived, so a reload
+    reproduces the same visits even when the uploader named the clinic once at
+    the top of the file.
     """
     accepted = {v.visit_id for v in parsed.visits}
     emitted: set[str] = set()
@@ -96,9 +87,8 @@ def _normalise_rows(parsed: ParsedDay, raw_rows: list[Any]) -> list[dict[str, An
         visit_id = row.get("visit_id")
         if visit_id not in accepted:
             continue
-        # In non-strict mode the rejected rows include duplicates of an accepted
-        # visit_id. Only the first occurrence was parsed into a visit, so only the
-        # first is stored — otherwise the insert would collide on the primary key.
+        # Only the first occurrence of a duplicated visit_id became a visit;
+        # storing the rest would collide on the primary key.
         if visit_id in emitted:
             continue
         emitted.add(visit_id)
@@ -118,9 +108,8 @@ def save_day(
 ) -> DayRecord:
     """Store (or atomically replace) one clinic-day.
 
-    ``parsed`` must contain only accepted rows — the caller decides what to do
-    with failures and passes them in as ``rejected`` so they are stored
-    alongside the day rather than dropped.
+    `parsed` must contain only accepted rows. The caller passes failures in as
+    `rejected` so they are stored alongside the day rather than dropped.
     """
     if parsed.errors:
         raise ValueError("refusing to store a billing day that failed validation")
@@ -138,8 +127,8 @@ def save_day(
     ingested_at = _now()
 
     with transaction() as conn:
-        # Replace, never merge: yesterday's correction must not leave orphan rows
-        # from the previous upload sitting in the same day.
+        # Replace, never merge: a correction must not leave orphan rows from a
+        # longer previous upload sitting in the same day.
         conn.execute(
             "DELETE FROM visits WHERE clinic_id = ? AND business_date = ?",
             (parsed.clinic_id, business_date),
@@ -180,9 +169,8 @@ def save_day(
             ],
         )
 
-        # A day's narrative describes the rows it was generated from. Replacing
-        # the rows makes it stale by definition, so it goes in the same
-        # transaction rather than being left for the cache check to notice.
+        # Replacing the rows makes the narrative stale by definition, so it goes
+        # in the same transaction rather than waiting for the cache check.
         conn.execute(
             "DELETE FROM narratives WHERE clinic_id = ? AND business_date = ? AND payload_hash != ?",
             (parsed.clinic_id, business_date, payload_hash),
@@ -201,11 +189,11 @@ def save_day(
 
 
 def get_day_record(clinic_id: str, business_date: str) -> DayRecord:
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM billing_days WHERE clinic_id = ? AND business_date = ?",
-        (clinic_id, business_date),
-    ).fetchone()
+    with serialised() as conn:
+        row = conn.execute(
+            "SELECT * FROM billing_days WHERE clinic_id = ? AND business_date = ?",
+            (clinic_id, business_date),
+        ).fetchone()
     if row is None:
         raise DayNotFoundError(clinic_id, business_date)
     return _to_record(row)
@@ -227,23 +215,24 @@ def _to_record(row: Any) -> DayRecord:
 def load_day(clinic_id: str, business_date: str) -> tuple[ParsedDay, DayRecord]:
     """Rehydrate a stored day back into validated visits.
 
-    The stored rows go through the *same* parser the ingest endpoint used, so a
-    report served from the database is byte-identical to one served straight
-    after upload.
+    Stored rows go through the same parser the ingest endpoint used, so a report
+    served from the database is identical to one served straight after upload.
     """
-    record = get_day_record(clinic_id, business_date)
-    conn = get_connection()
-    rows = [
-        json.loads(r["payload_json"])
-        for r in conn.execute(
-            """
-            SELECT payload_json FROM visits
-            WHERE clinic_id = ? AND business_date = ?
-            ORDER BY row_index
-            """,
-            (clinic_id, business_date),
-        )
-    ]
+    # Both reads under one lock hold: taken separately they could straddle a
+    # concurrent re-ingest and pair one upload's metadata with another's rows.
+    with serialised() as conn:
+        record = get_day_record(clinic_id, business_date)
+        rows = [
+            json.loads(r["payload_json"])
+            for r in conn.execute(
+                """
+                SELECT payload_json FROM visits
+                WHERE clinic_id = ? AND business_date = ?
+                ORDER BY row_index
+                """,
+                (clinic_id, business_date),
+            )
+        ]
 
     parsed = parse_billing_log(rows) if rows else _empty_day(clinic_id, business_date)
     if parsed.errors:  # pragma: no cover - would mean the store was corrupted
@@ -267,22 +256,27 @@ def _empty_day(clinic_id: str, business_date: str) -> ParsedDay:
 
 def list_days(clinic_id: str | None = None) -> list[DayRecord]:
     """Every stored day, most recent first — drives the sidebar's date picker."""
-    conn = get_connection()
-    if clinic_id:
-        cursor = conn.execute(
-            "SELECT * FROM billing_days WHERE clinic_id = ? ORDER BY business_date DESC",
-            (clinic_id,),
-        )
-    else:
-        cursor = conn.execute(
-            "SELECT * FROM billing_days ORDER BY clinic_id, business_date DESC"
-        )
-    return [_to_record(r) for r in cursor]
+    with serialised() as conn:
+        if clinic_id:
+            cursor = conn.execute(
+                "SELECT * FROM billing_days WHERE clinic_id = ? ORDER BY business_date DESC",
+                (clinic_id,),
+            )
+        else:
+            cursor = conn.execute(
+                "SELECT * FROM billing_days ORDER BY clinic_id, business_date DESC"
+            )
+        return [_to_record(r) for r in cursor]
 
 
 def list_clinics() -> list[str]:
-    conn = get_connection()
-    return [r["clinic_id"] for r in conn.execute("SELECT DISTINCT clinic_id FROM billing_days ORDER BY clinic_id")]
+    with serialised() as conn:
+        return [
+            r["clinic_id"]
+            for r in conn.execute(
+                "SELECT DISTINCT clinic_id FROM billing_days ORDER BY clinic_id"
+            )
+        ]
 
 
 # --------------------------------------------------------------------------
@@ -291,32 +285,31 @@ def list_clinics() -> list[str]:
 
 
 def save_narrative(clinic_id: str, business_date: str, payload_hash: str, narrative: dict) -> None:
-    conn = get_connection()
-    conn.execute(
-        """
-        INSERT INTO narratives (clinic_id, business_date, payload_hash, narrative_json, generated_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT (clinic_id, business_date) DO UPDATE SET
-            payload_hash   = excluded.payload_hash,
-            narrative_json = excluded.narrative_json,
-            generated_at   = excluded.generated_at
-        """,
-        (clinic_id, business_date, payload_hash, json.dumps(narrative), _now()),
-    )
+    with serialised() as conn:
+        conn.execute(
+            """
+            INSERT INTO narratives (clinic_id, business_date, payload_hash, narrative_json, generated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (clinic_id, business_date) DO UPDATE SET
+                payload_hash   = excluded.payload_hash,
+                narrative_json = excluded.narrative_json,
+                generated_at   = excluded.generated_at
+            """,
+            (clinic_id, business_date, payload_hash, json.dumps(narrative), _now()),
+        )
 
 
 def load_narrative(clinic_id: str, business_date: str, payload_hash: str) -> dict | None:
-    """Return the cached narrative only if it describes the *current* rows.
+    """Return the cached narrative only if it describes the current rows.
 
-    A hash mismatch means the day was re-ingested after the summary was written.
-    Serving it anyway would put stale figures in front of the owner, so the miss
-    is reported instead and the caller regenerates.
+    A hash mismatch means the day was re-ingested after the summary was written;
+    report a miss and let the caller regenerate.
     """
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT narrative_json, payload_hash FROM narratives WHERE clinic_id = ? AND business_date = ?",
-        (clinic_id, business_date),
-    ).fetchone()
+    with serialised() as conn:
+        row = conn.execute(
+            "SELECT narrative_json, payload_hash FROM narratives WHERE clinic_id = ? AND business_date = ?",
+            (clinic_id, business_date),
+        ).fetchone()
     if row is None or row["payload_hash"] != payload_hash:
         return None
     return json.loads(row["narrative_json"])

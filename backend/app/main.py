@@ -1,15 +1,15 @@
 """Application wiring and the error boundary.
 
-Every exception the API can raise is mapped to a structured JSON body with a
-stable ``error`` code. The catch-all handler at the bottom exists so that even an
-unforeseen bug produces a documented shape rather than a framework traceback —
-but it is genuinely a last resort: bad input is classified long before it gets
-there.
+Every exception the API can raise maps to a structured JSON body with a stable
+error code. The catch-all at the bottom means even an unforeseen bug returns a
+documented shape rather than a traceback, but it is a last resort — bad input is
+classified long before it gets there.
 """
 
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -25,6 +25,17 @@ from .storage.db import get_connection
 
 log = logging.getLogger("swasthiq")
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Create the schema and load the sample days before the first request."""
+    get_connection()
+    from .seed import seed_if_empty
+
+    seed_if_empty()
+    yield
+
+
 app = FastAPI(
     title="SwasthiQ EOD Billing & Analytics Agent",
     version="1.0.0",
@@ -34,6 +45,7 @@ app = FastAPI(
         "figure is traceable to the report."
     ),
     docs_url="/docs",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -47,14 +59,6 @@ app.add_middleware(
 app.include_router(router)
 
 
-@app.on_event("startup")
-def _startup() -> None:
-    get_connection()  # create the schema before the first request
-    from .seed import seed_if_empty
-
-    seed_if_empty()
-
-
 # --------------------------------------------------------------------------
 # Error boundary
 # --------------------------------------------------------------------------
@@ -63,7 +67,7 @@ def _startup() -> None:
 @app.exception_handler(BillingLogError)
 def handle_billing_log_error(_: Request, exc: BillingLogError) -> JSONResponse:
     """A malformed log is the caller's to fix, and the response says how."""
-    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=exc.to_dict())
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=exc.to_dict())
 
 
 @app.exception_handler(DayNotFoundError)
@@ -92,7 +96,7 @@ def handle_narrative_not_cached(_: Request, exc: NarrativeNotCachedError) -> JSO
 def handle_request_validation(_: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's own validation, reshaped to match our error envelope."""
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "error": "invalid_request",
             "message": "The request could not be understood",

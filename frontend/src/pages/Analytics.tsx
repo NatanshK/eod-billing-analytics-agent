@@ -7,7 +7,7 @@ import { HourChart } from "../components/HourChart";
 import { PageHead } from "../layout/AppShell";
 import { useAsync } from "../lib/useReport";
 import { plural } from "../lib/money";
-import { useDay } from "../state/DayContext";
+import { useDay } from "../state/day-context";
 
 export function AnalyticsPage() {
   const { clinicId, date, clinicName, error: dayError } = useDay();
@@ -47,9 +47,9 @@ export function AnalyticsPage() {
             />
           </Card>
 
-          {/* Two rankings, deliberately kept apart: the drug that moves the most
-              units is usually not the one that earns the most money, and a single
-              merged list would hide whichever fact it did not sort by. */}
+          {/* Kept apart on purpose: the drug that moves the most units is
+              usually not the one that earns the most, and a merged list would
+              hide whichever fact it did not sort by. */}
           <div className="two-col">
             <Card title="Top Medicines — by Quantity">
               <Ranking

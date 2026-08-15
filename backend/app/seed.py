@@ -1,9 +1,8 @@
 """Seed the store with the sample clinic-days.
 
-A deployed demo whose first screen is an empty state teaches a reviewer nothing.
-Seeding runs only when the store is empty, so it populates a fresh instance
-(including the ephemeral filesystem of a free-tier host) without ever
-overwriting data someone has ingested.
+Runs only when the store is empty, so it populates a fresh instance — including
+the ephemeral filesystem of a free-tier host — without overwriting data someone
+has ingested.
 """
 
 from __future__ import annotations
@@ -46,8 +45,8 @@ def load_seed_files(directory: Path | None = None) -> int:
             rows = extract_rows(load_payload(path.read_text()))
             parsed = parse_billing_log(rows)
 
-            # Same policy as the ingest endpoint: bad rows are quarantined and
-            # reported with the day, not grounds for dropping the whole file.
+            # Same policy as the ingest endpoint: quarantine bad rows rather
+            # than dropping the whole file.
             rejected = [e.to_dict() for e in parsed.errors]
             parsed.errors = []
 
@@ -70,8 +69,8 @@ def load_seed_files(directory: Path | None = None) -> int:
     return loaded
 
 
-#: Which clinic an empty seed file belongs to. Only used when the file itself
-#: has no rows to say; a real deployment would pass this in at upload time.
+#: Which clinic an empty seed file belongs to. Only used when the file has no
+#: rows to say; a real deployment would pass this in at upload time.
 SEED_CLINIC_ID = os.environ.get("SEED_CLINIC_ID", "CLN-KNP-014")
 
 

@@ -2,10 +2,9 @@
  * Screen 3 — AI Narrative Summary.
  *
  * The left card is what the owner would receive on WhatsApp. The right card is
- * the evidence: every figure in that text, beside the report field it was taken
- * from. The panel is not decoration — it is the visible form of the grounding
- * guarantee, and it is built from the same registry the backend used to render
- * the sentences, so the two cannot disagree.
+ * the evidence: every figure in that text beside the report field it came from.
+ * It is built from the same registry the backend used to render the sentences,
+ * so the two cannot disagree.
  */
 
 import { useEffect, useState } from "react";
@@ -14,7 +13,7 @@ import { ApiError, api } from "../api/client";
 import type { Narrative, TracedFigure } from "../api/types";
 import { Card, DataQualityNotice, ErrorState, Loading } from "../components/common";
 import { PageHead } from "../layout/AppShell";
-import { useDay } from "../state/DayContext";
+import { useDay } from "../state/day-context";
 
 export function NarrativePage() {
   const { clinicId, date, clinicName, clinicOwner, error: dayError } = useDay();
@@ -33,8 +32,8 @@ export function NarrativePage() {
 
     (async () => {
       try {
-        // Prefer the cached summary; generating one costs a model call, so it
-        // happens on request rather than on every visit to the screen.
+        // Generating costs a model call, so it happens on request rather than
+        // on every visit to the screen.
         const cached = await api.cachedNarrative(clinicId, date);
         if (!cancelled) setData(cached);
       } catch (caught) {
@@ -153,11 +152,10 @@ export function NarrativePage() {
 }
 
 /**
- * Says plainly where the words came from.
+ * Says where the words came from.
  *
- * A fallback summary is still fully grounded, but it was assembled from a
- * template rather than written by a model — labelling it as AI output would be
- * a small lie, and the reason is worth showing.
+ * A fallback summary is fully grounded but was assembled from a template rather
+ * than written by a model. Labelling it as AI output would be a small lie.
  */
 function SourceBadge({ narrative }: { narrative: Narrative }) {
   if (narrative.source === "llm") {

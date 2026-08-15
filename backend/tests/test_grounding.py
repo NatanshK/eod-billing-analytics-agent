@@ -1,8 +1,8 @@
 """Grounding tests — the core of the agentic requirement.
 
-Every test here answers one question: can a model, behaving badly in some
-specific way, get an untraceable number in front of the clinic owner? The answer
-must be no for each of them, and the request must survive in every case.
+Every test answers one question: can a model, misbehaving in some specific way,
+get an untraceable number in front of the clinic owner? The answer must be no,
+and the request must survive in every case.
 """
 
 from __future__ import annotations
@@ -229,6 +229,81 @@ def test_digit_in_the_caveat_is_rejected(registry):
     with pytest.raises(GroundingError) as exc:
         ground(draft(caveat="Cost price for all 5 items is missing."), registry)
     assert exc.value.gate == "literal_number"
+
+
+# --------------------------------------------------------------------------
+# Gate 3 — numbers spelled out in words
+#
+# Found in live output, not in review: told to write no digits, the model wrote
+# "Three refunds were processed". A digit-only scan calls that clean, and the
+# figure was never checked against the report.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Three refunds were processed today.",
+        "We saw eighteen visits.",
+        "About forty thousand rupees came in.",
+        "Roughly two lakh outstanding.",
+        "A dozen medicines moved.",
+        "Billed and collected both show zero.",
+    ],
+)
+def test_a_number_spelled_out_in_words_is_rejected(registry, line):
+    with pytest.raises(GroundingError) as exc:
+        ground(draft(body=[line]), registry)
+    assert exc.value.gate == "spelled_number"
+
+
+def test_a_spelled_number_in_the_caveat_is_also_rejected(registry):
+    with pytest.raises(GroundingError) as exc:
+        ground(draft(caveat="Cost price is missing for three of the line items."), registry)
+    assert exc.value.gate == "spelled_number"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Takings are steady, one of the better days this week.",
+        "No one was turned away today.",
+        "Everything balanced cleanly.",
+    ],
+)
+def test_ordinary_prose_is_not_mistaken_for_a_number(registry, line):
+    """'one' is a pronoun as often as a quantity; the idioms must survive."""
+    result = ground(draft(body=[line]), registry)
+    assert result.lines
+
+
+# --------------------------------------------------------------------------
+# Gate 4 — a unit written twice
+# --------------------------------------------------------------------------
+
+
+def test_a_unit_the_figure_already_carries_is_rejected(registry):
+    """`visit_count` renders to "18 visits", so this would read "18 visits visits".
+
+    Grounded, correct, and unsendable — the text goes to a clinic owner on
+    WhatsApp.
+    """
+    with pytest.raises(GroundingError) as exc:
+        ground(draft(body=["We saw {{visit_count}} visits today."]), registry)
+
+    assert exc.value.gate == "repeated_unit"
+    assert "visits" in exc.value.reason
+
+
+def test_the_same_figure_used_correctly_is_accepted(registry):
+    result = ground(draft(body=["We saw {{visit_count}} today."]), registry)
+    assert any("visit" in line for line in result.lines)
+
+
+def test_a_word_that_merely_follows_a_figure_is_fine(registry):
+    """Only an exact repeat of the figure's own trailing word is a duplicate."""
+    result = ground(draft(body=["{{visit_count}} came through the door."]), registry)
+    assert result.lines
 
 
 def test_unknown_token_is_rejected(registry):

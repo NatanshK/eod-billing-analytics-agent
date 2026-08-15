@@ -11,9 +11,9 @@ export interface Async<T> {
 }
 
 /**
- * Runs `fetcher` whenever the day changes, discarding results from a request
- * that has been superseded — stepping quickly through dates must not let an
- * earlier response overwrite a later one.
+ * Runs `fetcher` whenever the day changes, discarding superseded results.
+ * Stepping quickly through dates must not let an earlier response overwrite a
+ * later one.
  */
 export function useAsync<T>(
   fetcher: (() => Promise<T>) | null,

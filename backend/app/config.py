@@ -9,8 +9,8 @@ API_PREFIX = "/api/v1"
 DEFAULT_TOP_N = 5
 MAX_TOP_N = 20
 
-#: Upload ceiling. A clinic-day is kilobytes; anything near this is a mistake,
-#: and rejecting it early beats parsing megabytes of JSON to find out.
+#: A clinic-day is kilobytes, so anything near this is a mistake. Rejecting early
+#: beats parsing megabytes of JSON to find out.
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 5 * 1024 * 1024))
 
 
@@ -23,8 +23,8 @@ def allowed_origins() -> list[str]:
 
 
 #: Display names for known clinics. A production system would keep this in a
-#: clinics table; the billing log carries only an id, and inventing a friendly
-#: name from it would be guessing. Unknown ids fall back to the id itself.
+#: clinics table — the billing log carries only an id. Unknown ids fall back to
+#: the id itself rather than inventing a name.
 CLINIC_DIRECTORY: dict[str, dict[str, str]] = {
     "CLN-KNP-014": {
         "name": "Mehta Multi-Specialty Clinic",

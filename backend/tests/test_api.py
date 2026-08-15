@@ -125,6 +125,52 @@ def test_default_mode_quarantines_bad_rows_and_keeps_the_day(client, invalid_day
     assert body["rows_received"] == 10
 
 
+def test_a_quarantined_row_is_absent_from_the_totals_it_is_reported_beside(client):
+    """The disclosure banner and the stat cards have to agree.
+
+    A row rejected for belonging to another clinic used to be listed under
+    `rejected_rows` *and* summed into this clinic's billed total — so the screen
+    said "1 of 2 rows included" above figures that included both, and CLN-B's
+    ₹500 was filed under CLN-A.
+    """
+    rows = [
+        {
+            "clinic_id": "CLN-A",
+            "visit_id": "V-1",
+            "timestamp": "2026-07-27T09:00:00Z",
+            "line_items": [{"drug_name": "PARACETAMOL", "qty": 1, "unit_price_paise": 10000}],
+            "payment_mode": "cash",
+            "amount_paid_paise": 10000,
+            "discount_paise": 0,
+            "is_refund": False,
+        },
+        {
+            "clinic_id": "CLN-B",
+            "visit_id": "V-2",
+            "timestamp": "2026-07-27T10:00:00Z",
+            "line_items": [{"drug_name": "IBUPROFEN", "qty": 1, "unit_price_paise": 50000}],
+            "payment_mode": "cash",
+            "amount_paid_paise": 50000,
+            "discount_paise": 0,
+            "is_refund": False,
+        },
+    ]
+
+    created = client.post(f"{P}/billing-logs", json=rows).json()
+    assert created["clinic_id"] == "CLN-A"
+    assert created["visits_ingested"] == 1
+    assert [e["code"] for e in created["rejected_rows"]] == ["clinic_id_mismatch"]
+
+    body = client.get(f"{P}/reports/CLN-A/2026-07-27/reconciliation").json()
+    assert body["row_count"] == 1 and body["rows_received"] == 2
+    assert body["reconciliation"]["total_billed_paise"] == 10000  # not 60000
+    assert body["reconciliation"]["visit_count"] == 1
+
+    # The other clinic's drug must not appear in this clinic's rankings either.
+    analytics = client.get(f"{P}/reports/CLN-A/2026-07-27/analytics").json()
+    assert [d["drug_name"] for d in analytics["analytics"]["top_by_qty"]] == ["PARACETAMOL"]
+
+
 def test_rejected_rows_are_repeated_on_every_report(client, invalid_day):
     """A screen can never show totals without disclosing what is missing."""
     client.post(f"{P}/billing-logs", json=invalid_day)

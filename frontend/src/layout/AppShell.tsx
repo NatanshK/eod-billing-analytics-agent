@@ -2,7 +2,7 @@
 
 import { NavLink, Outlet } from "react-router-dom";
 
-import { useDay } from "../state/DayContext";
+import { useDay } from "../state/day-context";
 
 const NAV = [
   { to: "/reconciliation", label: "EOD Reconciliation", icon: ReconciliationIcon },
@@ -83,7 +83,7 @@ export function PageHead({ title, subtitle }: { title: string; subtitle?: string
   );
 }
 
-/* Inline SVGs — three icons is not worth an icon dependency. */
+/* Inline SVGs — three icons do not warrant an icon dependency. */
 
 function ReconciliationIcon() {
   return (

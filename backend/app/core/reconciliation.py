@@ -1,8 +1,7 @@
 """End-of-day reconciliation.
 
-Pure functions over a list of :class:`Visit`. This module is the ground truth the
-brief describes: it never calls an LLM, never reaches for the network, and never
-reads global state. Given the same visits it returns the same numbers.
+Pure functions over a list of Visit. Never calls an LLM, never reaches for the
+network, never reads global state. Same visits in, same numbers out.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from .parsing import PAYMENT_MODES, Visit
 
 @dataclass
 class ModeTotals:
-    """One row of the payment-mode breakdown table."""
+    """One row of the payment-mode breakdown."""
 
     mode: str
     billed_paise: int = 0
@@ -42,7 +41,7 @@ class ModeTotals:
 
 @dataclass
 class Reconciliation:
-    """The four headline figures plus their per-mode decomposition."""
+    """The four headline figures and their per-mode decomposition."""
 
     total_billed_paise: int
     total_collected_paise: int
@@ -85,24 +84,23 @@ class Reconciliation:
 class ReconciliationInvariantError(RuntimeError):
     """The per-mode breakdown failed to sum back to the headline totals.
 
-    This is an internal consistency bug, not a data problem. Raising beats
-    serving a report whose table disagrees with its own stat cards.
+    An internal consistency bug, not a data problem. Raising beats serving a
+    report whose table disagrees with its own stat cards.
     """
 
 
 def reconcile(visits: list[Visit]) -> Reconciliation:
     """Compute the EOD reconciliation for one clinic-day.
 
-    Definitions worth stating, because the brief leaves them open and the
-    narrative layer quotes these numbers verbatim:
+    The brief leaves these definitions open and the narrative quotes the numbers
+    verbatim, so they are pinned here:
 
-    * ``total_collected`` is **gross** of refunds; ``refunds`` is reported
-      alongside it and ``net_collected`` carries the difference. This keeps the
-      "billed − collected = outstanding" identity readable on the dashboard.
-    * ``outstanding`` sums the per-visit shortfall, so an overpaid visit cannot
-      mask an unpaid one. Any excess is reported separately as ``overpayments``.
-    * Refund visits contribute nothing to billed or outstanding — only to
-      ``refunds``.
+    * total_collected is gross of refunds; refunds sits alongside it and
+      net_collected carries the difference. Keeps "billed − collected =
+      outstanding" readable on the dashboard.
+    * outstanding sums the per-visit shortfall, so an overpaid visit cannot mask
+      an unpaid one. Excess is reported separately as overpayments.
+    * Refund visits contribute only to refunds.
     """
     modes: dict[str, ModeTotals] = {m: ModeTotals(mode=m) for m in PAYMENT_MODES}
 
@@ -157,7 +155,7 @@ def reconcile(visits: list[Visit]) -> Reconciliation:
 
 
 def _assert_invariants(r: Reconciliation) -> None:
-    """The mode columns must sum to the headline totals, exactly."""
+    """The mode columns must sum to the headline totals exactly."""
     checks = (
         ("billed", sum(m.billed_paise for m in r.by_mode), r.total_billed_paise),
         ("collected", sum(m.collected_paise for m in r.by_mode), r.total_collected_paise),

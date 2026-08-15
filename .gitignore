@@ -21,6 +21,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+.claude/
 
 # Provided dataset archive — its contents live in backend/seed_data/
 # and backend/tests/fixtures/real/

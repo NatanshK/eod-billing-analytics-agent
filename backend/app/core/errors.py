@@ -1,9 +1,7 @@
 """Domain error types.
 
-The brief is explicit that a malformed row must produce "a specific, actionable
-error — not a generic 500". Every rejection therefore carries a machine-readable
-``code``, the exact ``field`` at fault, the offending value, and a ``hint`` that
-tells the front desk what to do about it.
+Every rejection carries a machine-readable code, the field at fault, and a hint
+telling the front desk what to do about it.
 """
 
 from __future__ import annotations
@@ -40,11 +38,10 @@ class RowError:
 
 @dataclass(frozen=True)
 class RowWarning:
-    """Something odd but legitimate — accepted, surfaced, never silently dropped.
+    """Something odd but legitimate: accepted, surfaced, never silently dropped.
 
-    Warnings exist so that clamping behaviour (a discount larger than the line
-    total, an overpayment) is visible in the response instead of quietly changing
-    the totals.
+    Makes clamping behaviour — a discount larger than the line total, an
+    overpayment — visible in the response instead of quietly changing the totals.
     """
 
     row_index: int

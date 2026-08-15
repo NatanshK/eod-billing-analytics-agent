@@ -16,7 +16,7 @@ which **every figure is traceable back to the report**.
 ```bash
 # Backend — http://localhost:8000  (docs at /docs)
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m uvicorn app.main:app --reload
 
 # Frontend — http://localhost:5173
@@ -29,12 +29,26 @@ The backend seeds itself from `backend/seed_data/` on first start, so both the
 API and the UI have the three sample clinic-days loaded immediately.
 
 ```bash
-cd backend && .venv/bin/python -m pytest -q     # 233 tests
+cd backend && .venv/bin/python -m pytest -q     # 279 tests
 ```
 
 **No API key is required to run any of this.** Without `OPENROUTER_API_KEY` the
 narrative endpoint still returns a complete, fully grounded summary, labelled
 `source: "fallback"`. Configuration lives in `backend/.env.example`.
+
+To see model-written narratives instead, set an OpenRouter key. The default model
+is `nvidia/nemotron-3-super-120b-a12b:free` — a free-tier model, so a reviewer
+with a fresh key is not charged to run the demo:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...      # any OpenAI-compatible provider works
+export OPENROUTER_MODEL=...              # optional; any model id
+```
+
+Reasoning is disabled (`LLM_REASONING_EFFORT=none`). This task has nothing to
+reason about — the figures are fixed by the registry and the model only chooses
+phrasing — and on a hybrid model the thinking tokens share the completion budget
+with the JSON, so leaving it on truncates the response for no gain.
 
 ---
 
@@ -74,16 +88,26 @@ Every model response passes all four or is discarded whole:
 |---|---|---|
 | 1 | **Parse** | non-JSON, truncated JSON, prose (markdown fences are unwrapped, not rejected) |
 | 2 | **Schema** | missing/wrong-typed keys, empty body |
-| 3 | **Pre-substitution audit** | *any* digit outside a token, unknown tokens, and profit/margin/cost claims outside the caveat |
-| 4 | **Post-substitution audit** | any digit in the rendered text that did not come from a registry substitution |
+| 3 | **Pre-substitution audit** | *any* digit outside a token, **any number spelled out in words**, unknown tokens, and profit/margin/cost claims outside the caveat |
+| 4 | **Post-substitution audit** | any digit in the rendered text that did not come from a registry substitution; a unit written twice |
 
 Gate 3 rejects a correct number typed literally, not just a wrong one — accepting
 it would mean verifying arithmetic instead of provenance, and would leave the
 Traced Figures panel with nothing to point at.
 
+It also rejects numbers spelled out as words, and that check is not hypothetical.
+Told to write no digits, the model complied — and wrote *"Three refunds were
+processed"* instead. Correct, and never checked against the report, which is the
+one property this layer exists to provide; a digit-only scan calls it clean.
+`zero` through `crore` are rejected outside a token, with `one of` and `no one`
+excluded so ordinary prose survives.
+
 Gate 4 re-scans the finished text and requires every digit to fall inside a span
 that substitution produced. It is the audit an automated grader would run, run on
-ourselves before responding.
+ourselves before responding. It also catches a unit written twice: figures render
+as complete phrases — `visit_count` is "18 visits", not "18" — so
+"{{visit_count}} visits" renders "18 visits visits", which is grounded, correct,
+and not sendable to a clinic owner.
 
 On any failure: one corrective retry, then a **deterministic fallback** assembled
 directly from the registry — grounded by construction, and put through the same
@@ -271,7 +295,10 @@ Four guarantees, in `app/storage/repository.py`:
 Concurrency: one process-wide SQLite connection behind a re-entrant lock. A
 thread-local connection is the usual choice but is wrong for `:memory:`, where the
 database is scoped to its connection — each request thread would silently get an
-empty database of its own.
+empty database of its own. Reads take that lock too, not just writes: on a shared
+connection an unguarded statement issued while another thread holds
+`BEGIN IMMEDIATE` gets enlisted in *that* transaction, and an unguarded read can
+observe a day replacement half-applied.
 
 ---
 
@@ -293,7 +320,7 @@ A day with quarantined rows shows a disclosure banner on **all three** screens: 
 stat card reading "₹3,190 billed" is misleading on its own when a row was dropped
 on the way in.
 
-The chart is hand-rolled SVG/CSS — ten buckets does not warrant a charting
+The chart is hand-rolled CSS — ten buckets does not warrant a charting
 dependency. It is a single series, so there is no legend; the peak is both the
 darkest step *and* directly labelled, and negative (refund-heavy) hours are
 labelled with their values, so nothing is carried by colour alone. A "Show figures"
@@ -303,7 +330,7 @@ toggle exposes the same numbers as a table.
 
 ## Tests
 
-233 tests, `cd backend && .venv/bin/python -m pytest -q`.
+279 tests, `cd backend && .venv/bin/python -m pytest -q`.
 
 | File | Covers |
 |---|---|
@@ -313,6 +340,7 @@ toggle exposes the same numbers as a table.
 | `test_grounding.py` | The four gates against a model that returns prose, truncated JSON, unknown tokens, a smuggled literal, a profit claim, or times out |
 | `test_storage.py` | Atomic replace, hash stability, narrative invalidation |
 | `test_api.py` | Every endpoint; that no bad input yields a 500 |
+| `test_provider.py` | The HTTP transport: timeouts, 402/429, an error body behind a 200, a non-JSON body, unrecognised response shapes — every one must become a `ProviderError`, never a 500 |
 | `test_real_dataset.py` | The three provided days, including all-refund and empty |
 | `test_determinism.py` | AST scan proving the core imports no LLM or network; order-independence |
 
@@ -326,10 +354,14 @@ by the code under test would only prove the code agrees with itself.
 Frontend on Vercel (`frontend/vercel.json`), backend on Render
 (`backend/render.yaml`).
 
-- Set `VITE_API_BASE_URL` on Vercel to the Render URL.
+- On Vercel, set **Root Directory** to `frontend` — `vercel.json` configures the
+  build but cannot select the subdirectory it runs in.
+- Set `VITE_API_BASE_URL` on Vercel to the Render URL. It is read at *build* time,
+  so changing it needs a redeploy, not a restart.
 - Set `ALLOWED_ORIGINS` on Render to the Vercel origin.
 - Set `OPENROUTER_API_KEY` on Render for model-written narratives; without it the
-  deployment still works end to end on the fallback.
+  deployment still works end to end on the fallback. The model defaults to a
+  free-tier one, so the deployed demo costs nothing to run.
 - Render's free tier sleeps: the first request after idle can take ~30s.
 - `DB_PATH=:memory:` there, because the free tier's filesystem is ephemeral
   anyway; the sample days re-seed at startup.

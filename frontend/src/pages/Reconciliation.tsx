@@ -6,7 +6,7 @@ import { Card, DataQualityNotice, ErrorState, Loading } from "../components/comm
 import { PageHead } from "../layout/AppShell";
 import { useAsync } from "../lib/useReport";
 import { plural } from "../lib/money";
-import { useDay } from "../state/DayContext";
+import { useDay } from "../state/day-context";
 
 export function ReconciliationPage() {
   const { clinicId, date, error: dayError } = useDay();
@@ -58,8 +58,7 @@ function StatCards({ report }: { report: ReconciliationResponse }) {
       <Stat
         label="Total Collected"
         value={r.total_collected_display}
-        // A day with nothing billed has no collection rate. Saying "0% of billed"
-        // would read as a disastrous day rather than an empty one.
+        // "0% of billed" would read as a disastrous day rather than an empty one.
         note={
           r.collection_rate_pct === null
             ? "nothing billed today"

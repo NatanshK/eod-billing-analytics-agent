@@ -1,11 +1,10 @@
 /**
- * Display helpers for integer paise.
+ * Display helpers for integer paise — a port of backend/app/core/money.py.
  *
- * This is a deliberate character-for-character port of `backend/app/core/money.py`.
  * The Traced Figures panel proves grounding by matching the strings the backend
- * rendered, so if these two formatters ever disagree a correct narrative would
- * look like a grounding failure. Prefer the `*_display` fields the API already
- * sends; use these only where the UI composes a value the API did not.
+ * rendered, so if these two formatters disagree a correct narrative looks like a
+ * grounding failure. Prefer the `*_display` fields the API already sends; use
+ * these only where the UI composes a value the API did not.
  */
 
 const RUPEE = "₹";

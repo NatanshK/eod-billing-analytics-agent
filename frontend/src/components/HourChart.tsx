@@ -1,14 +1,13 @@
 /**
  * Revenue by hour of day.
  *
- * Single series, so there is no legend — the card title names it. The busiest
- * hour is the darkest step *and* carries a direct label, so the highlight never
- * depends on colour alone. Bar fills sit below 3:1 against the surface, so the
- * card ships a table view of the same figures as the required relief.
+ * One series, so no legend — the card title names it. The peak is the darkest
+ * bar and carries a written label, so the highlight never rests on colour alone;
+ * a "Show figures" toggle gives the same numbers as a table.
  *
- * Hours can go negative: a refund subtracts from the hour it was issued in. That
- * is a polarity change, not a smaller magnitude, so those bars grow downward
- * from a zero baseline in a warm hue and are always labelled.
+ * Hours can go negative when a refund exceeds takings. That is a polarity change
+ * rather than a smaller magnitude, so those bars grow downward from a zero
+ * baseline and are always labelled with their value.
  */
 
 import { useId, useState } from "react";
@@ -31,8 +30,8 @@ export function HourChart({ buckets, peak }: { buckets: HourBucket[]; peak: Hour
   const maxDown = Math.abs(Math.min(0, ...values));
   const span = maxUp + maxDown || 1;
 
-  // Split the plot between the up and down halves in proportion to the data, so
-  // a day with one small refund does not give half the chart to it.
+  // Split the plot in proportion to the data, so a day with one small refund
+  // does not give half the chart to it.
   const upHeight = Math.round((maxUp / span) * PLOT_HEIGHT);
   const downHeight = PLOT_HEIGHT - upHeight;
 
@@ -97,8 +96,7 @@ export function HourChart({ buckets, peak }: { buckets: HourBucket[]; peak: Hour
                         style={{ height: Math.max(MIN_BAR, (down / (maxDown || 1)) * downHeight) }}
                         title={`${bucket.label} — ${bucket.revenue_display} (net of refunds)`}
                       >
-                        {/* Labelled, so "money went out this hour" never rests on
-                            the colour change alone. */}
+                        {/* Labelled, so "money went out" never rests on colour. */}
                         <span className="chart__downlabel">{bucket.revenue_display}</span>
                       </div>
                     )}
@@ -108,8 +106,8 @@ export function HourChart({ buckets, peak }: { buckets: HourBucket[]; peak: Hour
             })}
           </div>
 
-          {/* Negative bars hang their value labels below the plot; the axis has
-              to step down or the two collide. */}
+          {/* Negative bars hang their labels below the plot, so the axis steps
+              down to avoid a collision. */}
           <div className={`chart__axis${maxDown > 0 ? " chart__axis--spaced" : ""}`}>
             {buckets.map((bucket) => (
               <div

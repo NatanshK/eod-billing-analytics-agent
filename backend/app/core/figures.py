@@ -1,19 +1,16 @@
 """The figure registry — the contract that keeps the narrative grounded.
 
-Every number the narrative is allowed to mention is enumerated here, once, with
-three things attached: the token the model writes instead of the digits, the
-exact string that token renders to, and the report field it came from.
+Every number the narrative may mention is enumerated here once, with the token
+the model writes instead of the digits, the string that token renders to, and the
+report field it came from.
 
-That single structure serves three purposes which therefore cannot disagree:
+One structure serves three purposes, so they cannot disagree: the vocabulary
+handed to the model, the substitution table used to render the text, and the
+traced-figures payload the UI displays as proof.
 
-* it is the **vocabulary** handed to the model (tokens only, no digits),
-* it is the **substitution table** used to render the final text, and
-* it is the **traced-figures payload** the UI panel displays as proof.
-
-The design consequence is the important one: because the model emits
-``{{total_billed}}`` rather than "₹42,850", a hallucinated figure is not a
-number that slips through a checker — it is a token that does not resolve, and
-resolution failure is a hard error.
+Because the model emits {{total_billed}} rather than "₹42,850", a hallucinated
+figure is not a number that slips past a checker — it is a token that does not
+resolve, and that is a hard error.
 """
 
 from __future__ import annotations
@@ -56,7 +53,7 @@ class Figure:
 
 
 class FigureRegistry:
-    """An ordered, immutable set of figures keyed by token name."""
+    """An ordered set of figures keyed by token name."""
 
     def __init__(self, figures: list[Figure]) -> None:
         self._figures = figures
@@ -80,7 +77,6 @@ class FigureRegistry:
 
     @property
     def displays(self) -> set[str]:
-        """Every string a rendered narrative is permitted to contain."""
         return {f.display for f in self._figures}
 
     def to_list(self) -> list[dict[str, Any]]:
@@ -107,15 +103,14 @@ def build_registry(
 ) -> FigureRegistry:
     """Enumerate every figure the narrative may cite for this clinic-day.
 
-    Only figures that actually mean something are included. A day with no
-    refunds contributes no refund figure, so the model has no way to write a
-    sentence about refunds that did not happen — the vocabulary simply lacks the
-    word.
+    Only figures that mean something are included. A day with no refunds
+    contributes no refund figure, so the model cannot write a sentence about
+    refunds that did not happen — the vocabulary lacks the word.
 
-    The clinic name and business date are registry entries too, not free text.
-    Both are report fields, and both can contain digits — ``CLINIC-MEHTA-001``,
-    ``27 Jul 2026`` — so routing them through the registry keeps the "every digit
-    is traced" rule true without carving out an exception for labels.
+    Clinic name and business date are registry entries too. Both are report
+    fields and both can contain digits (CLINIC-MEHTA-001, 27 Jul 2026), so
+    routing them through the registry keeps "every digit is traced" true without
+    an exception for labels.
     """
     figures: list[Figure] = []
 
@@ -280,9 +275,8 @@ def build_registry(
     return FigureRegistry(figures)
 
 
-#: Metrics the owner might expect but which this data cannot support. The brief
-#: is explicit: say so plainly rather than approximating one as another. Cost
-#: price is absent from the billing schema, so every profit-shaped question is
+#: Metrics the owner might expect but this data cannot support. Cost price is
+#: absent from the billing schema, so every profit-shaped question is
 #: unanswerable from this input — not merely hard.
 UNAVAILABLE_METRICS: tuple[tuple[str, str], ...] = (
     ("profit", "line items carry a selling price but no cost price"),
